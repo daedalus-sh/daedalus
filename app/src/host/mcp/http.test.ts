@@ -223,6 +223,7 @@ describe('a read token', () => {
       ['build.now', { app: 'anansi' }],
       ['build.cancel', { app: 'anansi', id: 'build-1' }],
       ['apply', {}],
+      ['apply.discard', {}],
     ] as const) {
       const res = await call(callTool(name, args), READ_TOKEN)
       // A refusal, not a transport error: the caller asked a real question and

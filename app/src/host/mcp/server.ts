@@ -433,6 +433,12 @@ export function buildMcpServer(identity: McpIdentity): McpServer {
       : refuse(`${outcome.code}: ${outcome.reason}`)
   })
 
+  write('apply.discard', {}, async () => {
+    const { discardChanges } = await import('../apply-flow')
+    const outcome = await discardChanges(await ctx())
+    return outcome.ok ? ok(outcome.value) : refuse(outcome.reason)
+  })
+
   const machineArg = {
     machine: z.string().min(1).describe("The machine's node id, as Settings › Machines shows it."),
   }

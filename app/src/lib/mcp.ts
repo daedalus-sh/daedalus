@@ -114,6 +114,12 @@ export const MCP_TOOLS: readonly McpToolSpec[] = [
     summary: 'Write the registry and site files, rebuild, and switch.',
   },
   {
+    name: 'apply.discard',
+    scope: 'write',
+    summary:
+      "Drop what the next Apply would carry, as the Apply bar's Discard does: the site goes back to the committed files and each app's registry edits are undone. Rebuilds nothing.",
+  },
+  {
     name: 'report.daily',
     scope: 'read',
     summary:

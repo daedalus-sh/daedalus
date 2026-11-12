@@ -397,10 +397,10 @@ cannot disagree with the page that mirrors it. The tools (`app/src/lib/mcp.ts` i
 | | |
 |---|---|
 | reads | `apps.list`, `apps.get`, `builds.list`, `builds.get`, `builds.log`, `deployments`, `images.freshness`, `dns.records`, `site.get`, `apply.preview`, `health`, `versions.pending` |
-| writes | `build.now`, `build.cancel`, `deploy.trigger`, `image.update`, `apply`, `provider.install`, `provider.power`, `provider.always_on`, `version.update` |
+| writes | `build.now`, `build.cancel`, `deploy.trigger`, `image.update`, `apply`, `apply.discard`, `provider.install`, `provider.power`, `provider.always_on`, `version.update` |
 
 `apply.preview` is the diff an Apply would carry, computed by the very function
-`runApply` computes it with, and committing nothing. Two resources —
+`runApply` computes it with, and committing nothing. `apply.discard` is the Apply bar's Discard: the site draft dropped, each app's registry edit undone, nothing rebuilt. Two resources —
 `ARCHITECTURE.md` (this file) and `BUILDS.md` — are served so an agent can read
 the design before acting.
 
