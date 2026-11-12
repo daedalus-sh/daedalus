@@ -60,6 +60,7 @@ describe('lemonade', () => {
     expect(modeOf(['edit'])).toBe('image_edit')
     expect(modeOf(['custom', 'tool-calling'])).toBe('chat')
     expect(modeOf([])).toBe('chat')
+    expect(modeOf(['classification', 'systemone'])).toBe('decisions')
   })
 })
 
@@ -112,6 +113,7 @@ describe('the route a model becomes', () => {
     expect(r.litellm_params.api_base).toBe('http://gaming-pc.lan:13305/api/v1')
     expect(r.model_info.mode).toBe('rerank')
     expect(upstreamFor('chat', 'x')).toBe('openai/x')
+    expect(upstreamFor('decisions', 'user.vllm-d3-nano')).toBe('hosted_vllm/user.vllm-d3-nano')
   })
 
   it('knows where each kind hangs its OpenAI surface', () => {

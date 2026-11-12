@@ -24,6 +24,7 @@ export const MODEL_MODES: readonly ModelMode[] = [
   'audio_speech',
   'image_generation',
   'image_edit',
+  'decisions',
 ]
 
 export const MODE_WORD: Record<ModelMode, string> = {
@@ -34,6 +35,7 @@ export const MODE_WORD: Record<ModelMode, string> = {
   audio_speech: 'text to speech',
   image_generation: 'images',
   image_edit: 'image edits',
+  decisions: 'decisions',
 }
 
 /** What the gateway accepts as a model name, kept to what a URL and a config file both take. */

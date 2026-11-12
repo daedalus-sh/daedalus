@@ -115,6 +115,7 @@ export type ModelMode =
   | 'audio_speech'
   | 'image_generation'
   | 'image_edit'
+  | 'decisions'
 
 export type ProviderModel = {
   /** The id the provider serves it under. */
@@ -145,6 +146,8 @@ export type ProviderHealth = {
  */
 export function modeOf(labels: readonly string[]): ModelMode {
   const has = (l: string) => labels.includes(l)
+  // A decision model (/v1/systemone) is labelled `classification` too.
+  if (has('systemone')) return 'decisions'
   if (has('embeddings') || has('embedding')) return 'embedding'
   if (has('reranking') || has('rerank')) return 'rerank'
   if (has('transcription')) return 'audio_transcription'
@@ -272,12 +275,14 @@ const REPLY_RESERVE = 16_384
 
 /**
  * The LiteLLM model string a route dials: `openai/<id>` — the transport, not
- * the vendor — except a reranker's, `hosted_vllm/<id>`: LiteLLM's openai
- * provider has no rerank, and hosted_vllm posts the Cohere-shaped body to
- * `<api_base>/rerank`, which Lemonade serves.
+ * the vendor — except a reranker's and a decision model's, `hosted_vllm/<id>`:
+ * LiteLLM's openai provider has neither, and hosted_vllm posts the
+ * Cohere-shaped body to `<api_base>/rerank` and a decision to
+ * `<api_base minus /v1>/v1/systemone` (`/api/v1/systemone` on Lemonade),
+ * both of which Lemonade serves.
  */
 export function upstreamFor(mode: ModelMode, id: string): string {
-  return mode === 'rerank' ? `hosted_vllm/${id}` : `openai/${id}`
+  return mode === 'rerank' || mode === 'decisions' ? `hosted_vllm/${id}` : `openai/${id}`
 }
 
 /**
