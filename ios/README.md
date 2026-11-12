@@ -70,5 +70,5 @@ Signing is cloud-managed with that key. By hand, once:
    platform iOS).
 3. On a Mac with the key's `.p8` in `~/Downloads`: `ios/scripts/setup-ci.sh` (it sets the three secrets
    and the variable). The key itself is made at <https://appstoreconnect.apple.com/access/integrations/api>.
- The version is `MARKETING_VERSION` there; the
+The version is `MARKETING_VERSION` in `Config/App.xcconfig`; the
 build number is the workflow's run number.
