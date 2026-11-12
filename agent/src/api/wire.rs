@@ -30,54 +30,7 @@ use crate::link::wire::{Command, Hello, NodeState, Policy, PolicyRequest};
 use crate::node::providers::ProviderReport;
 use crate::telemetry::Telemetry;
 
-/// What an agent offers, from its role and config (api/mod.rs
-/// `capabilities`): a method whose capability is absent answers
-/// `unsupported`. `unknown`: a newer machine's word, read in its hello.
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum Capability {
-    /// Claude remote control runs in the user's session (`claude.status`,
-    /// `claude.restart`).
-    #[serde(rename = "claude.remote_control")]
-    ClaudeRemoteControl,
-    /// The agent updates Claude Code (never on the controller: nix pins it).
-    #[serde(rename = "claude.update")]
-    ClaudeUpdate,
-    /// The roster of Claude sessions and their verbs.
-    #[serde(rename = "claude.sessions")]
-    ClaudeSessions,
-    #[serde(rename = "telemetry.full")]
-    TelemetryFull,
-    #[serde(rename = "telemetry.minimal")]
-    TelemetryMinimal,
-    /// A machine reads its providers and drives their residency for the box.
-    #[serde(rename = "providers.residency")]
-    ProvidersResidency,
-    /// A machine installs, updates, starts and stops its providers for the
-    /// box (`nodes.provider_install`, `nodes.provider_power`).
-    #[serde(rename = "providers.lifecycle")]
-    ProvidersLifecycle,
-    /// The controller listens for machines (`nodes.*`).
-    #[serde(rename = "nodes")]
-    Nodes,
-    /// The controller reaches the root helper (`root.*`).
-    #[serde(rename = "root")]
-    Root,
-    /// The controller follows a session host (`santree.status`).
-    #[serde(rename = "santree")]
-    Santree,
-    /// The controller holds its link key (`controller.rotate`).
-    #[serde(rename = "controller")]
-    Controller,
-    #[serde(rename = "unknown", other)]
-    Unknown,
-}
-
-impl std::fmt::Display for Capability {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        crate::util::wire_name(self, f)
-    }
-}
+pub use daedalus_core::link::wire::{Capability, NodeKind};
 
 /// The API's methods, each with its parameters and its answer — the one
 /// list: `ApiRequest` is read from it, and ts.rs writes the app's `Methods`
@@ -257,6 +210,12 @@ pub struct NodeSummary {
     pub id: String,
     pub fingerprint: String,
     pub state: NodeState,
+    /// `light` when its hello or the app's set says so (link/wire.rs
+    /// `NodeKind`) or its OS is "ios" or "ipados", else `agent`. Of a light
+    /// node only its hello, its telemetry and a status that repeats its
+    /// hello's facts (`os_version` among them) are kept: `claude` stays
+    /// null, and the status's other fields read as their defaults.
+    pub kind: NodeKind,
     pub connected: bool,
     /// When the current connection opened; null while disconnected.
     pub since: Option<String>,
@@ -272,7 +231,8 @@ pub struct NodeSummary {
     pub claude: Option<Summary>,
     /// What shape the machine is ("laptop", "desktop", …) and its model —
     /// the board's product where the firmware names one, else the
-    /// machine's — from its last telemetry; null without one.
+    /// machine's — from its last telemetry; null without one. A light
+    /// node's model is in its hello, and stands in until its telemetry.
     pub form: Option<String>,
     pub model: Option<String>,
     /// Its status document, as it last pushed it, and when.
@@ -548,6 +508,14 @@ pub struct DesiredNode {
     #[serde(default)]
     #[cfg_attr(test, ts(optional))]
     pub name: Option<String>,
+    /// What kind of node the key is, as the app knows it (a phone it
+    /// paired is `light`); absent means an agent. A light node is sent no
+    /// policy and no command, never reaches the session host's allow-list,
+    /// and its link going down never alerts, whatever `policy` says
+    /// (controller/link/).
+    #[serde(default)]
+    #[cfg_attr(test, ts(optional))]
+    pub kind: Option<NodeKind>,
 }
 
 #[cfg_attr(test, derive(ts_rs::TS))]
@@ -951,37 +919,7 @@ pub struct EnrollController {
     pub address: String,
 }
 
-/// A wg-easy client config, as wg-quick names its fields: what the app
-/// reads back from wg-easy for the machine (`[Interface]` PrivateKey and
-/// Address, `[Peer]` PublicKey, PresharedKey, Endpoint and AllowedIPs), and
-/// what the machine keeps in `tunnel.toml` (tunnel/). Its keys are wiped
-/// from memory when it is dropped, and it is never printed.
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct WireguardConfig {
-    pub private_key: String,
-    /// This machine inside the tunnel, `a.b.c.d` — wg-easy writes a prefix
-    /// (`/24`), which is ignored.
-    pub address: String,
-    pub server_public_key: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(test, ts(optional))]
-    pub preshared_key: Option<String>,
-    /// `host:port`.
-    pub endpoint: String,
-    /// Exactly one: the box's LAN address, `/32`.
-    pub allowed_ips: Vec<String>,
-}
-
-impl Drop for WireguardConfig {
-    fn drop(&mut self) {
-        use zeroize::Zeroize;
-        self.private_key.zeroize();
-        if let Some(k) = self.preshared_key.as_mut() {
-            k.zeroize();
-        }
-    }
-}
+pub use daedalus_core::wireguard::WireguardConfig;
 
 /// One answer of each method, each event and an error, as the agent writes
 /// them — the golden tests' own values. ts.rs writes them beside the
@@ -1463,6 +1401,7 @@ mod tests {
             id: "0123456789abcdef".into(),
             fingerprint: "0123:4567".into(),
             state: NodeState::Approved,
+            kind: NodeKind::Agent,
             connected: true,
             since: Some("2026-09-27T10:00:00Z".into()),
             last_seen: Some("2026-09-27T10:00:15Z".into()),
@@ -1486,7 +1425,7 @@ mod tests {
     }
 
     const SUMMARY: &str = concat!(
-        r#""id":"0123456789abcdef","fingerprint":"0123:4567","state":"approved","connected":true,"#,
+        r#""id":"0123456789abcdef","fingerprint":"0123:4567","state":"approved","kind":"agent","connected":true,"#,
         r#""since":"2026-09-27T10:00:00Z","last_seen":"2026-09-27T10:00:15Z","hostname":"PC","#,
         r#""os":"windows","arch":"x86_64","agent_version":"0.14.0","lan_ip":"192.168.0.120","#,
         r#""mac":"aa:bb:cc:dd:ee:ff","claude":{"state":"running","detail":null,"cli_version":null,"#,
@@ -1519,7 +1458,7 @@ mod tests {
         assert_eq!(
             wire(&unseen),
             concat!(
-                r#"{"id":"0123456789abcdef","fingerprint":"0123:4567","state":"unknown","connected":false,"#,
+                r#"{"id":"0123456789abcdef","fingerprint":"0123:4567","state":"unknown","kind":"agent","connected":false,"#,
                 r#""since":null,"last_seen":null,"hostname":null,"os":null,"arch":null,"agent_version":null,"#,
                 r#""lan_ip":null,"mac":null,"claude":null,"form":null,"model":null,"status":null,"status_at":null}"#
             )

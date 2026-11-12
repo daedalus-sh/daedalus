@@ -132,9 +132,24 @@ API connections and 64 links; the link's port open to the LAN alone, the
 metrics page's to none; a `claude_unit` no other unit uses, and
 `nix-store` on its PATH (see "The claude a job runs, pinned").
 
-## The crate
+## The crates
+
+Two, one workspace. `core/` (`daedalus-core`) is what a machine needs to
+be a node and nothing of one OS's service — keys and configs are bytes in
+and bytes out there — and two crates build from it: this agent, which
+re-exports each module where its own code names it (`crate::link`,
+`crate::identity`, `crate::net`, `crate::ipc`, `node::tunnel`), and the iOS
+app's library (`ios/core`), a light node (below).
 
 ```
+core/src/
+  identity.rs        the ed25519 key, its fingerprint and node id; a rotation's statement
+  link/              the link's protocol: TLS (tls.rs) over the crate's own crypto provider (crypto.rs),
+                     certificates (cert.rs), the messages (wire.rs), and a node's side as far as every
+                     node shares it — the hello exchange, and a light node's whole conversation (client.rs)
+  tunnel/            the machine's WireGuard tunnel (macOS, Linux, iOS); testbox.rs, a box in the test's process
+  net.rs             the Dialer: direct, or through the tunnel alone
+  ipc/               the one envelope (rpc.rs), line framing (jsonl.rs), deadlines that do not move (deadline.rs)
 src/
   lib.rs             the module list, grouped as below
   bin/               daedalus-agent (the service and its verbs), daedalus-agent-tray (feature `tray`)
@@ -146,22 +161,40 @@ src/
   core/              config.toml, the role table, paths, the persisted state, the machine's facts, the log;
                      shared/ — what the service's threads share, one hub per concern, each its own lock —
                      and status.rs, the status document built from it
-  ipc/               the one envelope (rpc.rs), line framing (jsonl.rs), deadlines that do not move
-                     (deadline.rs), doors that know their callers (door.rs), the local socket (local/)
-  node/              a machine's side: the link (link.rs), a log-in (enroll.rs) and its tunnel (tunnel/),
+  ipc/               doors that know their callers (door.rs), the local socket (local/)
+  node/              a machine's side: the link (link.rs), a log-in (enroll.rs) and its tunnel's file (tunnel/),
                      pairing (pair.rs), the awake hold (power.rs), its settings (settings.rs), providers/,
                      santree's door (santree.rs), self-update (update/)
   controller/        the box's side, feature `controller`, Linux only: api/, the machines' links (link/),
                      key rotation (rotation.rs), session_host.rs, root/ (relay and helper), metrics_page.rs
   api/               the app↔controller contract both sides share: wire.rs, the version, capabilities
-  link/              the link's protocol: TLS (tls.rs) over the crate's own crypto provider (crypto.rs),
-                     certificates (cert.rs), the messages (wire.rs)
+  link/              the keys the service follows and their files; wire.rs, the golden tests of the messages
   claude/            Claude Code: the supervisor, the roster, the session verbs, recovery, gcroots
   telemetry/         the machine's document, its parsers, Prometheus text
   jobs/              a Claude job of the OS, as pure command lines; os/*/jobs.rs make the calls
   os/                everything that differs by OS, one module per OS exporting the same names
-  dns.rs, discover.rs, exec.rs, http.rs, identity.rs, net.rs, private.rs, procfs.rs, time.rs, util.rs
+  identity.rs        the key's file (sealed, private); net.rs, the machine's adapter
+  dns.rs, discover.rs, exec.rs, http.rs, private.rs, procfs.rs, time.rs, util.rs
 ```
+
+## Light nodes
+
+A node need not run this agent. The iOS app is a **light node**
+(`core/src/link/wire.rs` `NodeKind`): its own key, the same link through
+its own tunnel, on it only while the app is open. Its hello says `kind:
+"light"` with `os` "ios" or "ipados" (either makes it light), offers
+`telemetry.minimal` alone, and carries its model. It pushes `telemetry`
+(the same document, the fields a device has, with `battery.low_power`) and
+a `status` that repeats its hello's facts; it may `leave`. The controller
+(`src/controller/link/registry.rs` `Reg::light`) approves, holds pending
+and revokes it like any key, and otherwise asks nothing of it: no policy
+in its welcome or after, every command and verb refused `unsupported` and
+never queued, no santree grant in the session host's allow-list, nothing
+kept but those two documents. On `/nodes/metrics` its
+`daedalus_agent_link_alert` is always 0 — being away is ordinary — and it
+has no Claude, provider, services or application series; its battery is
+`battery_percent`, `battery_charging` and `battery_low_power`.
+`nodes.list` names it by `kind`.
 
 ## The link to the controller
 
@@ -169,12 +202,12 @@ Every machine keeps ONE outbound connection to the controller, and only
 the controller talks to the app: a star with the box at the centre. The
 link carries control messages — who a machine is, how it is, what it runs,
 and the box's word back — never data-plane traffic. The header of
-`src/link/mod.rs` is the reference (transport, framing, trust, limits);
+`core/src/link/mod.rs` is the reference (transport, framing, trust, limits);
 `src/node/link.rs` is the machine's side, `src/controller/link/` the
 controller's.
 
 **Transport.** TLS 1.3 on every OS through rustls, over pure-Rust
-primitives the crate plugs in itself (`src/link/crypto.rs`), so the link
+primitives the crate plugs in itself (`core/src/link/crypto.rs`), so the link
 builds no C crypto library; Windows builds none at all, and the gate checks
 it. Each end presents a certificate made from its ed25519 identity key;
 there is no CA and no hostname. A key is shown as the SHA-256 of its public
@@ -246,7 +279,7 @@ forgets the log-in: pin and address out of config.toml, the tunnel down,
 `tunnel.toml` and the kept policy deleted. A Mac the box revokes forgets
 it the same way.
 
-**The tunnel** (`src/node/tunnel/`) runs in the service: boringtun and
+**The tunnel** (`core/src/tunnel/`) runs in the service: boringtun and
 smoltcp on one thread — no utun device, no route — reaching one address,
 the box's, and dialling nothing else. Linux builds the same code, so its
 tests and `e2e-tunnel.sh` (against a real wg-easy) run there; Windows
@@ -672,7 +705,8 @@ agent on its version.
 [`gate.sh`](gate.sh) runs, in a throwaway rust container, fmt, clippy for
 Linux with the tray and the controller, Linux as the static service is
 built (neither), Windows (`x86_64-pc-windows-gnu`) and macOS
-(`aarch64-apple-darwin`, with zig as ring's C compiler), the tests with the
+(`aarch64-apple-darwin`, with zig as ring's C compiler), the shared crate
+for iOS (`aarch64-apple-ios`, the same zig), the tests with the
 controller's, and the static musl build: `agent/gate.sh
 [fmt|check|test|musl|gen|all]`. The tests are platform-neutral — the OS
 tools' parsers (`src/telemetry/parse/`), the DNS SRV codec, the units

@@ -1,0 +1,58 @@
+[package]
+name = "daedalus-core"
+version = "0.1.0"
+edition = "2021"
+# The agent's (../Cargo.toml): one rustc for everything built from here.
+rust-version = "1.95"
+description = "What a machine needs to be a node of a daedalus box: its key, the link to the controller, its WireGuard tunnel."
+repository = "https://github.com/daedalus-sh/daedalus"
+license = "MIT"
+publish = false
+
+[lib]
+name = "daedalus_core"
+path = "src/lib.rs"
+
+[features]
+# The app's TypeScript: the wire types derive ts-rs's `TS`. Only the agent's
+# tests turn it on (../src/ts.rs), so no release build links ts-rs.
+ts = ["dep:ts-rs"]
+# What other crates' tests stand on: the in-process WireGuard peer
+# (tunnel/testbox.rs) and the link's plain server config (link/tls.rs).
+testing = []
+
+[dependencies]
+anyhow = "1"
+ed25519-dalek = { version = "2", features = ["std", "rand_core"] }
+rand_core = { version = "0.6", features = ["getrandom"] }
+hex = "0.4"
+# The line scan (ipc/jsonl.rs).
+memchr = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["raw_value"] }
+sha2 = "0.10"
+tracing = "0.1"
+zeroize = "1"
+# The link (link/): TLS 1.3 through rustls over pure-Rust primitives the
+# crate plugs in itself (link/crypto.rs) — X25519, ChaCha20-Poly1305,
+# SHA-256 and HMAC, ed25519 — so the link builds no C crypto for any target.
+rustls = { version = "0.23", default-features = false, features = ["std"] }
+x25519-dalek = "2"
+chacha20poly1305 = { version = "0.10", default-features = false }
+hmac = "0.12"
+ts-rs = { version = "12", default-features = false, features = ["serde-compat", "serde-json-impl", "no-serde-warnings"], optional = true }
+
+# The tunnel (tunnel/): boringtun's sans-IO `noise::Tunn` for WireGuard and
+# smoltcp for the TCP inside it, all in the process. boringtun's AEAD is
+# ring's, a C library, so the tunnel exists on macOS, Linux and iOS and a
+# Windows build compiles none of it.
+[target.'cfg(any(target_os = "macos", target_os = "linux", target_os = "ios"))'.dependencies]
+boringtun = { version = "=0.7.1", default-features = false }
+smoltcp = { version = "0.14", default-features = false, features = ["std", "medium-ip", "proto-ipv4", "socket-tcp", "socket-tcp-cubic"] }
+# WireGuard keys as `wg` writes them.
+base64 = "0.22"
+
+# The link's provider against ring's (link/tls.rs's interop test), on Linux
+# where ring is built anyway.
+[target.'cfg(target_os = "linux")'.dev-dependencies]
+rustls = { version = "0.23", default-features = false, features = ["std", "ring"] }

@@ -147,6 +147,7 @@ fn entry(nid: &Identity, state: DesiredState, policy: crate::link::wire::Policy)
         public_key: *nid.public_key().as_bytes(),
         state,
         policy,
+        kind: crate::link::wire::NodeKind::Agent,
         name: None,
         offer_lemonade: false,
         alert_link: true,
@@ -1158,6 +1159,7 @@ fn a_decision_is_for_a_key_not_an_id() {
         public_key: *id(28).public_key().as_bytes(),
         state: DesiredState::Approved,
         policy: claude_policy(),
+        kind: crate::link::wire::NodeKind::Agent,
         name: None,
         offer_lemonade: false,
         alert_link: true,
@@ -2240,4 +2242,346 @@ fn a_machine_asks_for_its_settings_and_only_the_app_s_set_changes_them() {
     ))
     .unwrap();
     assert!(answer_to(&mut t, 1001).contains("not approved"));
+}
+
+/// A phone's telemetry as the iOS app sends it (ios/core's `daedalus_report`):
+/// what it can know, and nothing else.
+fn phone_telemetry() -> serde_json::Value {
+    serde_json::json!({
+        "sampled_at": "2026-11-12T10:00:00Z",
+        "machine": {"manufacturer": "Apple", "model": "iPhone17,1", "form": "phone"},
+        "os": {"build": "24A335"},
+        "memory": {"total_bytes": 8_000_000_000u64, "used_bytes": 5_000_000_000u64},
+        "disks": [{"mount": "/", "total_bytes": 256_000_000_000u64, "free_bytes": 100_000_000_000u64}],
+        "battery": {"percent": 82.0, "charging": true, "low_power": false}
+    })
+}
+
+fn phone_hello() -> Hello {
+    Hello {
+        agent_version: "1.0.0".into(),
+        os: "ios".into(),
+        arch: "aarch64".into(),
+        hostname: "Santiago’s iPhone".into(),
+        facts: wire::HelloFacts {
+            os_name: "iOS".into(),
+            os_version: "27.0".into(),
+            model: Some("iPhone17,1".into()),
+            ..Default::default()
+        },
+        capabilities: vec![crate::api::wire::Capability::TelemetryMinimal],
+        telemetry: crate::core::config::TelemetryLevel::Minimal,
+        ..Default::default()
+    }
+}
+
+/// A light node on its own thread: the shared crate's client, the one the
+/// iOS library runs (core/src/link/client.rs).
+fn spawn_light(
+    ctl: &Ctl,
+    nid: &Identity,
+) -> (
+    Arc<daedalus_core::link::client::Light>,
+    Shutdown,
+    std::thread::JoinHandle<()>,
+) {
+    use daedalus_core::link::client::{Cadence as LightCadence, Light};
+    let link = Light::new(
+        nid,
+        crate::net::Dialer::Direct,
+        ctl.listener.local_addr.to_string(),
+        pin_of(&ctl.id),
+        phone_hello(),
+    )
+    .unwrap()
+    .with_cadence(LightCadence {
+        heartbeat: Duration::from_millis(300),
+        dead_after: Duration::from_secs(3),
+        push_every: Duration::from_secs(60),
+        backoff_min: Duration::from_millis(100),
+        backoff_max: Duration::from_millis(400),
+    });
+    let stop = Shutdown::new();
+    let thread = {
+        let (link, stop) = (Arc::clone(&link), stop.clone());
+        std::thread::spawn(move || link.run(&stop))
+    };
+    (link, stop, thread)
+}
+
+fn light_entry(nid: &Identity) -> DesiredEntry {
+    DesiredEntry {
+        kind: wire::NodeKind::Light,
+        name: Some("iPhone".into()),
+        // What a careless set would carry for it: a santree grant, a
+        // lemonade offer, a link alert. None of them holds for a light node.
+        policy: crate::link::wire::Policy {
+            santree: true,
+            ..claude_policy()
+        },
+        offer_lemonade: true,
+        alert_link: true,
+        ..entry(nid, DesiredState::Approved, claude_policy())
+    }
+}
+
+#[test]
+fn a_light_node_reports_its_telemetry_and_is_asked_nothing() {
+    use crate::link::LinkState;
+    let dir = scratch("light-allow");
+    let allow = dir.join("session-host-allow.json");
+    let cid = id(200);
+    let events = events();
+    let registry =
+        Arc::new(Registry::new(Arc::clone(&events), fast()).with_allow_list(allow.clone()));
+    let listener = listen("127.0.0.1:0".parse().unwrap(), &cid, Arc::clone(&registry)).unwrap();
+    let ctl = Ctl {
+        id: cid,
+        registry,
+        listener,
+        events,
+    };
+    ctl.registry
+        .set_session_host(crate::link::wire::SessionHost {
+            address: "box.example.org:7789".into(),
+            public_key: "ab".repeat(32),
+        });
+    let phone = id(70);
+    let pid = phone.node_id();
+
+    // Unknown to the app: pending, and already told apart by its hello.
+    let (link, stop, thread) = spawn_light(&ctl, &phone);
+    link.report(&phone_telemetry()).unwrap();
+    wait_for("the phone pending", 5, || {
+        link.status().state == Some(LinkState::Pending)
+    });
+    let s = summary(&ctl, &phone).unwrap();
+    assert_eq!(
+        (s.state, s.kind, s.connected),
+        (NodeState::Pending, wire::NodeKind::Light, true)
+    );
+    assert_eq!(s.os.as_deref(), Some("ios"));
+    assert_eq!(s.hostname.as_deref(), Some("Santiago’s iPhone"));
+    assert_eq!(s.agent_version.as_deref(), Some("1.0.0"));
+    // No telemetry is kept of a pending key: the model is its hello's.
+    assert_eq!(s.model.as_deref(), Some("iPhone17,1"));
+    assert_eq!((s.lan_ip, s.mac, s.form), (None, None, None));
+
+    // Approved in place, as light: it hears where it stands, and pushes.
+    let ok = ctl.registry.set_desired(vec![light_entry(&phone)]);
+    assert_eq!(ok.approved, vec![pid.clone()]);
+    assert!(ok.policy.is_empty());
+    wait_for("the phone's telemetry", 5, || {
+        ctl.registry
+            .get(&pid, true)
+            .is_ok_and(|d| d.telemetry.is_some())
+    });
+    assert_eq!(link.status().state, Some(LinkState::Approved));
+    let d = ctl.registry.get(&pid, true).unwrap();
+    let t = d.telemetry.unwrap();
+    assert_eq!(t.machine.model.as_deref(), Some("iPhone17,1"));
+    assert_eq!(t.machine.form.as_deref(), Some("phone"));
+    assert_eq!(t.os.build.as_deref(), Some("24A335"));
+    assert_eq!(t.memory.total_bytes, Some(8_000_000_000));
+    assert_eq!(t.disks[0].free_bytes, Some(100_000_000_000));
+    let b = t.battery.unwrap();
+    assert_eq!(
+        (b.percent, b.charging, b.low_power),
+        (Some(82.0), Some(true), Some(false))
+    );
+    // What a phone cannot know stays unsaid.
+    assert_eq!(
+        (t.cpu.usage_pct, t.process_count, t.updates),
+        (None, None, None)
+    );
+    assert_eq!((b.health_pct, b.cycles), (None, None));
+    let s = d.node;
+    assert_eq!(s.kind, wire::NodeKind::Light);
+    assert_eq!(s.form.as_deref(), Some("phone"));
+    // Its status says what its hello did — the OS version the app reads
+    // there — and holds nothing awake; no Claude, no providers.
+    wait_for("the phone's status", 5, || {
+        summary(&ctl, &phone).is_some_and(|s| s.status.is_some())
+    });
+    let st = summary(&ctl, &phone).unwrap().status.unwrap();
+    assert_eq!(
+        (
+            st.facts.os.as_str(),
+            st.facts.os_version.as_str(),
+            st.version.as_str()
+        ),
+        ("ios", "27.0", "1.0.0")
+    );
+    assert!(!st.awake_hold && !st.policy.awake_hold && !st.policy.claude_remote_control);
+    assert!(st.claude.is_none() && st.controller.is_none());
+    assert!(s.claude.is_none());
+    assert!(d.providers.is_none());
+    assert_eq!(d.hello.unwrap().kind, Some(wire::NodeKind::Light));
+
+    // No santree grant reached the session host's allow-list, whatever the
+    // set carried.
+    let listed = std::fs::read_to_string(&allow).unwrap();
+    assert!(!listed.contains(&pid), "{listed}");
+
+    // No command, no session verb, no provider verb: refused, never queued.
+    for e in [
+        ctl.registry
+            .command(&pid, Command::CheckUpdate)
+            .unwrap_err(),
+        ctl.registry
+            .claude_session(&pid, crate::claude::SessionAction::Stop, "abc")
+            .unwrap_err(),
+    ] {
+        assert_eq!(e.code, ErrorCode::Unsupported, "{}", e.msg);
+        assert!(e.msg.contains("light node"), "{}", e.msg);
+    }
+
+    // The page: its battery, memory and volume, the link — and no alert, no
+    // Claude, no providers, no counts it cannot read.
+    let page = ctl.registry.metrics();
+    let mine: Vec<&str> = page.lines().filter(|l| l.contains(&pid)).collect();
+    let has = |needle: &str| mine.iter().any(|l| l.starts_with(needle));
+    let value = |needle: &str| {
+        mine.iter()
+            .find(|l| l.starts_with(needle))
+            .and_then(|l| l.rsplit(' ').next())
+            .map(str::to_string)
+    };
+    assert_eq!(value("daedalus_agent_link_alert{").as_deref(), Some("0"));
+    assert_eq!(value("daedalus_agent_link_up{").as_deref(), Some("1"));
+    assert_eq!(
+        value("daedalus_agent_battery_percent{").as_deref(),
+        Some("82")
+    );
+    assert_eq!(
+        value("daedalus_agent_battery_charging{").as_deref(),
+        Some("1")
+    );
+    assert_eq!(
+        value("daedalus_agent_battery_low_power{").as_deref(),
+        Some("0")
+    );
+    assert!(has("daedalus_agent_memory_total_bytes{"));
+    assert!(has("daedalus_agent_disk_free_bytes{"));
+    assert!(mine.iter().any(|l| l.starts_with("daedalus_agent_info{")
+        && l.contains(r#"os="ios""#)
+        && l.contains(r#"machine="iPhone""#)
+        && l.contains(r#"version="1.0.0""#)
+        && l.contains(r#"model="iPhone17,1""#)));
+    for absent in [
+        "daedalus_agent_claude_up{",
+        "daedalus_agent_services_down{",
+        "daedalus_agent_apps{",
+        "daedalus_agent_provider_up{",
+    ] {
+        assert!(!has(absent), "{absent} in {mine:?}");
+    }
+
+    // Unpaired from the device: the app hears `nodes.left`, as for a Mac
+    // that logs out, and the link dials nobody again.
+    let app = ctl.events.subscribe();
+    link.leave(Duration::from_secs(5)).unwrap();
+    assert!(app
+        .try_iter()
+        .any(|l| l.contains("nodes.left") && l.contains(&pid)));
+    thread.join().unwrap();
+    drop(stop);
+    wait_for("the phone gone", 5, || {
+        summary(&ctl, &phone).is_some_and(|s| !s.connected)
+    });
+    let s = summary(&ctl, &phone).unwrap();
+    assert_eq!(
+        (s.state, s.kind),
+        (NodeState::Approved, wire::NodeKind::Light)
+    );
+    let page = ctl.registry.metrics();
+    assert!(page.contains(&format!("daedalus_agent_link_alert{{node=\"{pid}\"}} 0")));
+    assert!(page
+        .lines()
+        .any(|l| l.starts_with("daedalus_agent_link_up{")
+            && l.contains(&pid)
+            && l.ends_with(" 0")));
+    // Still nothing kept for it to do when it comes back.
+    assert_eq!(
+        ctl.registry
+            .command(&pid, Command::CheckUpdate)
+            .unwrap_err()
+            .code,
+        ErrorCode::Unsupported
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_light_node_is_sent_no_policy_and_only_its_telemetry_is_kept() {
+    let ctl = controller(fast());
+    // The app's set calls the key an agent's; the hello says light, and
+    // that is enough.
+    let phone = id(71);
+    let pid = phone.node_id();
+    approve(&ctl.registry, &phone, claude_policy());
+    let light = |h: &mut Hello| {
+        let node_id = h.node_id.clone();
+        *h = Hello {
+            proto: PROTO,
+            node_id,
+            kind: Some(wire::NodeKind::Light),
+            ..phone_hello()
+        };
+    };
+    let (mut t, first) = raw_hello(&ctl, &phone, light).unwrap();
+    assert!(first.contains(r#""state":"approved""#), "{first}");
+    assert!(first.contains(r#""policy":null"#), "{first}");
+    // A Claude report, a providers list: neither is a light node's to
+    // push, and neither is kept. Its telemetry is.
+    t.send(&wire::event(
+        name::CLAUDE,
+        &serde_json::json!({"state": "running"}),
+    ))
+    .unwrap();
+    t.send(&wire::event(name::PROVIDERS, &serde_json::json!([])))
+        .unwrap();
+    t.send(&wire::event(name::TELEMETRY, &phone_telemetry()))
+        .unwrap();
+    wait_for("the telemetry kept", 5, || {
+        ctl.registry
+            .get(&pid, true)
+            .is_ok_and(|d| d.telemetry.is_some())
+    });
+    let d = ctl.registry.get(&pid, true).unwrap();
+    assert_eq!(d.node.kind, wire::NodeKind::Light);
+    assert!(d.node.claude.is_none() && d.providers.is_none());
+    assert!(ctl.registry.claude(&pid).unwrap().report.is_none());
+    // A changed policy is not sent to it, and it may ask for none.
+    let ok = approve(
+        &ctl.registry,
+        &phone,
+        crate::link::wire::Policy {
+            awake_hold: false,
+            ..claude_policy()
+        },
+    );
+    assert!(ok.policy.is_empty(), "{ok:?}");
+    t.send(&wire::request(
+        1001,
+        name::POLICY_REQUEST,
+        &serde_json::json!({"awake_hold": false}),
+    ))
+    .unwrap();
+    assert!(answer_to(&mut t, 1001).contains(r#""code":"unsupported""#));
+    assert!(ctl
+        .registry
+        .metrics()
+        .contains(&format!("daedalus_agent_link_alert{{node=\"{pid}\"}} 0")));
+
+    // An agent's hello is unchanged by any of this: no `kind` on the wire.
+    let line = wire::request(
+        1,
+        name::HELLO,
+        &hello_of(&Config::default(), &id(72), &facts()),
+    );
+    assert!(
+        !line.contains("kind") && !line.contains("\"model\""),
+        "{line}"
+    );
 }

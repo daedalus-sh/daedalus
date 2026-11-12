@@ -1,6 +1,6 @@
 [package]
 name = "daedalus-agent"
-version = "0.29.0"
+version = "0.30.0"
 edition = "2021"
 # The rustc of the nixpkgs the box builds it with (26.05); rust-toolchain.toml
 # pins the same release for every other build.
@@ -10,6 +10,13 @@ repository = "https://github.com/daedalus-sh/daedalus"
 license = "MIT"
 publish = false
 build = "build.rs"
+
+# The shared crate (core/): what a node needs to be a node, built by this
+# crate and by the iOS app's library (ios/core). A member, so one lock and
+# one target directory serve both, and the gate checks it as a package.
+[workspace]
+members = [".", "core"]
+default-members = [".", "core"]
 
 [lib]
 name = "daedalus_agent"
@@ -41,12 +48,12 @@ controller = []
 tray = ["dep:tray-icon", "dep:tao", "dep:gtk", "dep:objc2-service-management", "dep:objc2-foundation"]
 
 [dependencies]
+# The key, the link, the tunnel, the envelope: core/src/lib.rs.
+daedalus-core = { path = "core" }
 anyhow = "1"
 ed25519-dalek = { version = "2", features = ["std", "rand_core"] }
 rand_core = { version = "0.6", features = ["getrandom"] }
 hex = "0.4"
-# The line scan of every door (jsonl.rs): already in the tree through regex.
-memchr = "2"
 png = "0.18"
 semver = "1"
 serde = { version = "1", features = ["derive"] }
@@ -64,27 +71,18 @@ tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
 # log filter already brings, not a second one.
 regex-automata = { version = "0.4", default-features = false, features = ["std", "syntax", "meta"] }
 
-# The controller link (link/): TLS 1.3 through rustls on every OS, over
-# pure-Rust primitives the crate plugs in itself (link/crypto.rs) — X25519,
-# ChaCha20-Poly1305, SHA-256 and HMAC, ed25519 — so the link builds no C
-# crypto library for any target. ureq's HTTPS is unchanged (below).
+# rustls as the link holds it (core/src/link/): the controller's key resolver
+# (controller/rotation.rs) and santree's pipe (node/santree.rs) name its
+# types. No C crypto: the link's provider is the shared crate's own.
 rustls = { version = "0.23", default-features = false, features = ["std"] }
-x25519-dalek = "2"
-chacha20poly1305 = { version = "0.10", default-features = false }
-hmac = "0.12"
 zeroize = "1"
 
-# The machine's own WireGuard tunnel to the box (tunnel/): boringtun's
-# sans-IO `noise::Tunn` for the protocol — handshake, cookies, rekeying,
-# replay, keepalives — and smoltcp for the TCP inside it, all in this
-# process: no utun, no route, no listener. macOS and Linux only: boringtun's
-# AEAD is ring's, a C library, so Windows (no tunnel in this version) builds
-# none; gate.sh checks macOS with zig as ring's C compiler.
+# A log-in (enroll.rs), where a machine has a tunnel to log in for — macOS
+# and Linux: the shared crate builds the tunnel there (boringtun, whose AEAD
+# is ring's, a C library; gate.sh checks macOS with zig as ring's C
+# compiler) and not on Windows, which builds no C crypto.
 [target.'cfg(any(target_os = "macos", target_os = "linux"))'.dependencies]
-boringtun = { version = "=0.7.1", default-features = false }
-smoltcp = { version = "0.14", default-features = false, features = ["std", "medium-ip", "proto-ipv4", "socket-tcp", "socket-tcp-cubic"] }
-# WireGuard keys as `wg` writes them, and PKCE's verifier and challenge
-# (tunnel/, enroll.rs): base64.
+# PKCE's verifier and challenge.
 base64 = "0.22"
 # Sign-in (enroll.rs): the loopback callback's query, read and built, and
 # its one-time state compared in constant time. Both already in the tree.
@@ -169,6 +167,10 @@ tray-icon = { version = "0.25", default-features = false, features = ["libappind
 # The app's TypeScript wire types are generated from this crate's types by a
 # test (src/ts.rs), so ts-rs is a dev-dependency: no release binary links it.
 [dev-dependencies]
+# The shared crate's types derive `TS` for the same test, and its tests'
+# helpers (the in-process WireGuard peer, the link's plain server config)
+# stand behind this crate's.
+daedalus-core = { path = "core", features = ["ts", "testing"] }
 ts-rs = { version = "12", default-features = false, features = ["serde-compat", "serde-json-impl", "no-serde-warnings"] }
 
 [build-dependencies]

@@ -249,7 +249,9 @@ fn logging_in_redeems_once_with_the_verifier_and_logging_out_forgets_it() {
     let f = files(&dir);
     std::fs::write(&f.config, "# mine\ntelemetry = \"minimal\"\n").unwrap();
     let s = node();
-    let me = Identity::load_or_create_at(&f.identity).unwrap().node_id();
+    let me = crate::identity::load_or_create_at(&f.identity)
+        .unwrap()
+        .node_id();
     let begin_now = |s: &Shared| {
         begin(
             s,

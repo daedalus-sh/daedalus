@@ -353,6 +353,7 @@ pub fn battery_uevent(text: &str) -> Option<crate::telemetry::Battery> {
             .get("HEALTH")
             .filter(|h| !h.is_empty() && **h != "Unknown")
             .map(|h| h.to_string()),
+        low_power: None,
     })
 }
 

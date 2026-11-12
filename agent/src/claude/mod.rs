@@ -75,28 +75,7 @@ pub use roster::Roster;
 pub use sessions::Sessions;
 pub use supervisor::Supervisor;
 
-/// The three verbs on one session (sessions/).
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum SessionAction {
-    /// `claude --resume <uuid>` in a job of its own.
-    Resume,
-    /// End a session this agent resumed, or a running background agent.
-    Stop,
-    /// `claude rm <short id>`: a background agent's record.
-    Remove,
-}
-
-impl SessionAction {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            SessionAction::Resume => "resume",
-            SessionAction::Stop => "stop",
-            SessionAction::Remove => "remove",
-        }
-    }
-}
+pub use daedalus_core::link::wire::SessionAction;
 
 /// Where Claude remote control stands, as the report says it: `off` (not
 /// wanted, whatever else is true), `not-installed` (wanted, no `claude`),

@@ -481,6 +481,7 @@ mod tests {
                 santree,
                 ..Policy::default()
             },
+            kind: crate::link::wire::NodeKind::Agent,
             name: Some(format!("machine {n}")),
             offer_lemonade: false,
             alert_link: true,

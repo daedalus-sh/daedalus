@@ -3,7 +3,8 @@
 # Linux (with the GTK tray and the controller, and without either as the
 # static service is built), Windows and macOS, the tests (the controller's
 # with them), and the static musl service, in a throwaway
-# rust container. `fmt` and `all` run `cargo fmt`, which rewrites the tree;
+# rust container. The shared crate (core/) is a member of the workspace, so
+# every step covers it too. `fmt` and `all` run `cargo fmt`, which rewrites the tree;
 # every mode ends with `cargo fmt --check`. Prints "GATE OK" only when every
 # part passed; exits non-zero otherwise.
 # Usage: agent/gate.sh [fmt|check|test|musl|gen|all]   (default all)
@@ -34,8 +35,10 @@
 # libc headers it ships): downloaded once into the cargo cache, pinned by
 # its SHA-256, and handed to ring's build through a two-line wrapper that
 # drops the flags cc-rs adds for Apple's clang (`-arch`,
-# `-mmacosx-version-min`). Windows builds no C crypto at all: `check`
-# fails when ring or aws-lc is in the Windows tree.
+# `-mmacosx-version-min`). The shared crate (core/) is checked for iOS the
+# same way, since the iOS app's library builds it (ios/core, whose own gate
+# checks that library and the simulator target). Windows builds no C crypto
+# at all: `check` fails when ring or aws-lc is in the Windows tree.
 set -eu
 here="$(cd "$(dirname "$0")" && pwd)"
 what="${1:-all}"
@@ -55,7 +58,7 @@ podman run --rm -v "$here":/w/agent -v "$here/../session-host":/w/session-host -
     apt-get install -y -qq --no-install-recommends \
       libgtk-3-dev libayatana-appindicator3-dev musl-tools file >/dev/null 2>&1 \
       || { echo "apt-get install failed"; exit 1; }
-    rustup target add x86_64-pc-windows-gnu aarch64-apple-darwin x86_64-unknown-linux-musl >/dev/null 2>&1
+    rustup target add x86_64-pc-windows-gnu aarch64-apple-darwin x86_64-unknown-linux-musl aarch64-apple-ios >/dev/null 2>&1
     rustup component add clippy rustfmt >/dev/null 2>&1
     # session-host/interop builds this crate by path and pins its version in
     # its own Cargo.lock: a version bump here leaves that lock stale and its
@@ -67,7 +70,7 @@ podman run --rm -v "$here":/w/agent -v "$here/../session-host":/w/session-host -
       || { echo "cargo update of session-host/interop failed"; exit 1; }
     what="'"$what"'"
     failed=0
-    if [ "$what" = fmt ] || [ "$what" = all ]; then cargo fmt; fi
+    if [ "$what" = fmt ] || [ "$what" = all ]; then cargo fmt --all; fi
     if [ "$what" = gen ]; then
       echo "--- generating the app'"'"'s wire types"
       if ! DAEDALUS_TS_WRITE=1 cargo test --lib --features controller ts:: > /tmp/gen.log 2>&1; then
@@ -102,6 +105,21 @@ podman run --rm -v "$here":/w/agent -v "$here/../session-host":/w/session-host -
           grep -E "^(warning|error)" -A12 /tmp/clippy.log | grep -v "resource not embedded" | head -80
         fi
       done
+      # The shared crate for iOS (see the header): the same zig, with its
+      # macOS headers for the few libc ones ring includes, and a directory
+      # for the SDK cc-rs would otherwise ask xcrun for.
+      printf "%s\n" "#!/bin/bash" "out=(); skip=0" \
+        "for a in \"\$@\"; do if [ \$skip = 1 ]; then skip=0; continue; fi" \
+        "  case \"\$a\" in -arch|-isysroot) skip=1;; -mios-version-min=*|-miphoneos-version-min=*|-mtargetos=*|--target=*) ;; *) out+=(\"\$a\");; esac; done" \
+        "exec $zig_dir/zig cc -target aarch64-ios -isystem $zig_dir/lib/libc/include/any-macos-any \"\${out[@]}\"" > /usr/local/bin/zcc-aarch64-ios
+      chmod 755 /usr/local/bin/zcc-aarch64-ios
+      mkdir -p /tmp/ios-sdk
+      echo "--- clippy -p daedalus-core --target aarch64-apple-ios"
+      if ! CC_aarch64_apple_ios=/usr/local/bin/zcc-aarch64-ios AR_aarch64_apple_ios=/usr/local/bin/zar SDKROOT=/tmp/ios-sdk \
+          cargo clippy -p daedalus-core --lib --target aarch64-apple-ios -- -D warnings > /tmp/clippy.log 2>&1; then
+        failed=1
+        grep -E "^(warning|error)" -A12 /tmp/clippy.log | head -80
+      fi
       echo "--- no C crypto on Windows"
       if cargo tree --target x86_64-pc-windows-gnu -e normal,build --prefix none > /tmp/tree.log 2>&1 \
           && ! grep -Eq "^(ring|aws-lc-rs|aws-lc-sys) " /tmp/tree.log; then
@@ -129,7 +147,7 @@ podman run --rm -v "$here":/w/agent -v "$here/../session-host":/w/session-host -
         grep -E "^(warning|error)" -A12 /tmp/musl.log | head -60
       fi
     fi
-    if ! cargo fmt --check; then failed=1; fi
+    if ! cargo fmt --all --check; then failed=1; fi
     if [ "$failed" = 0 ]; then echo "GATE OK"; else echo "GATE FAILED"; exit 1; fi
   '
 status=$?

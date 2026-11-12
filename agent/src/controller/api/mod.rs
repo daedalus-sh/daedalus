@@ -771,6 +771,7 @@ fn desired_entries(
                 public_key: key,
                 state: n.state,
                 policy,
+                kind: n.kind.unwrap_or(wire::NodeKind::Agent),
                 name: n.name,
                 offer_lemonade,
                 alert_link,

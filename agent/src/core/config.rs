@@ -252,15 +252,7 @@ pub enum Mode {
     Controller,
 }
 
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum TelemetryLevel {
-    #[default]
-    Full,
-    Minimal,
-    Off,
-}
+pub use daedalus_core::link::wire::TelemetryLevel;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -526,23 +518,7 @@ impl Config {
     }
 }
 
-/// `host:port`, `a.b.c.d:port` or `[v6]:port`, with a port that is not 0.
-pub fn valid_host_port(s: &str) -> bool {
-    let Some((host, port)) = s.rsplit_once(':') else {
-        return false;
-    };
-    let host_ok = match host.strip_prefix('[').and_then(|h| h.strip_suffix(']')) {
-        Some(v6) => v6.parse::<std::net::Ipv6Addr>().is_ok(),
-        None => {
-            !host.is_empty()
-                && host.len() <= 253
-                && host
-                    .chars()
-                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '.' | '_'))
-        }
-    };
-    host_ok && port.parse::<u16>().is_ok_and(|p| p != 0)
-}
+pub use daedalus_core::util::valid_host_port;
 
 /// `advertise` as one string or a list of them.
 fn one_or_many<'de, D, T>(d: D) -> Result<Vec<T>, D::Error>

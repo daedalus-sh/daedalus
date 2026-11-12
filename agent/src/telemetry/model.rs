@@ -23,8 +23,9 @@ pub struct Machine {
     pub board_manufacturer: Option<String>,
     pub board_product: Option<String>,
     /// What shape the machine is: "laptop" | "desktop" | "tower" | "mini" |
-    /// "all-in-one" | "server" | "tablet", from the chassis type (SMBIOS type
-    /// 3 on Windows, the model name on a Mac). None when not stated.
+    /// "all-in-one" | "server" | "tablet" | "phone", from the chassis type
+    /// (SMBIOS type 3 on Windows, the model name on a Mac, the device idiom
+    /// on iOS). None when not stated.
     pub form: Option<String>,
     /// Apple's board target (`hw.target`, "J516sAP"): the name Apple's own
     /// software catalogue lists supported machines by, which the model
@@ -208,6 +209,9 @@ pub struct Battery {
     /// The OS's own verdict on the battery, as it words it: "Normal",
     /// "Service Recommended".
     pub condition: Option<String>,
+    /// Low Power Mode is on: a phone's or a tablet's word (a light node).
+    /// None where the OS has no such switch or nobody reads it.
+    pub low_power: Option<bool>,
 }
 
 /// An application installed on the machine, from wherever the OS records

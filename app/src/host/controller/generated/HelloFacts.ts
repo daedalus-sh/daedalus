@@ -3,4 +3,10 @@
 /**
  * What a machine is, in `hello`'s facts.
  */
-export type HelloFacts = { os_name: string, os_version: string, cpu: string, memory_bytes: number | null, };
+export type HelloFacts = { os_name: string, os_version: string, cpu: string, memory_bytes: number | null, 
+/**
+ * The model, as the device names it ("iPhone17,1"): a light node's,
+ * so a pending phone can be told from another before it may push
+ * telemetry. Absent from an agent's hello, whose telemetry carries it.
+ */
+model?: string, };

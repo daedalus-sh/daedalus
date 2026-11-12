@@ -1,6 +1,5 @@
-//! The one envelope every door of this agent speaks — the API socket
-//! (controller/api/), the link (link/) and the local socket (ipc/local/): one JSON
-//! object per line.
+//! The one envelope every door speaks — the link (link/) and, in the agent,
+//! the API socket and the local socket: one JSON object per line.
 //!
 //! ```text
 //! → {"id":1,"m":"<method>","p":{…}}
@@ -53,6 +52,7 @@ pub trait Methods: serde::de::DeserializeOwned {
 ///     }
 /// }
 /// ```
+#[macro_export]
 macro_rules! methods {
     (
         $(#[$meta:meta])*
@@ -71,7 +71,7 @@ macro_rules! methods {
         }
     };
 }
-pub(crate) use methods;
+pub use methods;
 
 impl Request {
     /// The request as the door's own method enum: `unknown_method` for a name
@@ -186,19 +186,19 @@ impl Serialize for Response {
 /// Why a request failed: `code` for a program, `msg` for a person.
 /// `supported` rides only a `version` error: the API version this agent
 /// speaks.
-#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ApiError {
     pub code: ErrorCode,
     #[serde(default)]
     pub msg: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(test, ts(optional))]
+    #[cfg_attr(feature = "ts", ts(optional))]
     pub supported: Option<u32>,
 }
 
 /// The error codes, all of them.
-#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ErrorCode {
@@ -351,7 +351,6 @@ impl Events {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::api::wire::{ApiEvent, NodeLeft};
     use serde_json::json;
 
     #[test]
@@ -360,7 +359,7 @@ mod tests {
         let rx = events.subscribe();
         let gone = events.subscribe();
         drop(gone);
-        let left = |id: &str| ApiEvent::NodesLeft(NodeLeft { id: id.into() });
+        let left = |id: &str| json!({"e": "nodes.left", "p": {"id": id}});
         let told = events.publish(&left("0123456789abcdef"));
         // The live one took it; the gone one is not counted.
         assert_eq!(told, 1);

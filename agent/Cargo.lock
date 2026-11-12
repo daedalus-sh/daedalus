@@ -405,19 +405,16 @@ dependencies = [
 
 [[package]]
 name = "daedalus-agent"
-version = "0.29.0"
+version = "0.30.0"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
- "boringtun",
- "chacha20poly1305",
+ "daedalus-core",
  "ed25519-dalek",
  "form_urlencoded",
  "gtk",
  "hex",
- "hmac",
  "libc",
- "memchr",
  "native-tls",
  "objc2-foundation",
  "objc2-service-management",
@@ -431,7 +428,6 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
- "smoltcp",
  "subtle",
  "tao",
  "tiny_http",
@@ -447,6 +443,29 @@ dependencies = [
  "windows 0.61.3",
  "windows-service",
  "winresource",
+ "zeroize",
+]
+
+[[package]]
+name = "daedalus-core"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base64 0.22.1",
+ "boringtun",
+ "chacha20poly1305",
+ "ed25519-dalek",
+ "hex",
+ "hmac",
+ "memchr",
+ "rand_core",
+ "rustls",
+ "serde",
+ "serde_json",
+ "sha2",
+ "smoltcp",
+ "tracing",
+ "ts-rs",
  "x25519-dalek",
  "zeroize",
 ]

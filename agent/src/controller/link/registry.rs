@@ -26,7 +26,7 @@ use crate::link::wire::{
     self, name, ClaudeSessionParams, Command, CommandParams, ControllerId, Hello, NodeState,
     StateEvent, Welcome, PROTO,
 };
-use crate::link::wire::{Policy, SessionHost};
+use crate::link::wire::{NodeKind, Policy, SessionHost};
 use crate::link::{
     DEAD_AFTER, HEARTBEAT, MAX_CONNECTIONS, MAX_PENDING, MAX_PREAUTH, PENDING_PER_IP, PENDING_TTL,
     POLICY_REQUESTS_PER_MINUTE, PREAUTH_BUDGET, PREAUTH_PER_IP, UNKNOWN_ADDRESSES,
@@ -181,6 +181,8 @@ struct Desired {
     public_key: [u8; 32],
     state: DesiredState,
     policy: Policy,
+    /// What the app says the key is; a light one is held to `light_entry`.
+    kind: NodeKind,
     /// What the pages call the machine; `/nodes/metrics` labels it `machine`.
     name: Option<String>,
     /// The app offers its lemonade to the gateway; `/nodes/metrics` labels
@@ -198,6 +200,9 @@ pub struct DesiredEntry {
     pub public_key: [u8; 32],
     pub state: DesiredState,
     pub policy: Policy,
+    /// What kind of node the app says this key is (api/wire.rs
+    /// `DesiredNode::kind`).
+    pub kind: NodeKind,
     pub name: Option<String>,
     /// The app offers its lemonade to the gateway (`/nodes/metrics`); the
     /// machine is not told.
@@ -233,6 +238,19 @@ impl Reg {
             None
         };
         p
+    }
+
+    /// Whether `id` is a light node (link/wire.rs `NodeKind`): the app's set
+    /// says so, or its own hello does (`light_hello`). It gets no policy and no command,
+    /// nothing it pushes but its telemetry is kept, and its link going
+    /// down never alerts.
+    fn light(&self, id: &str) -> bool {
+        self.decided(id).is_some_and(|d| d.kind == NodeKind::Light)
+            || self
+                .nodes
+                .get(id)
+                .and_then(|e| e.hello.as_ref())
+                .is_some_and(light_hello)
     }
 
     /// The app's decision for `id` — if it was made for the key this entry
@@ -284,6 +302,11 @@ impl Reg {
             id: id.to_string(),
             fingerprint: fingerprint(&key),
             state: self.state_of(id),
+            kind: if self.light(id) {
+                NodeKind::Light
+            } else {
+                NodeKind::Agent
+            },
             connected: e.is_some_and(|e| e.conn.is_some()),
             since: e.and_then(|e| e.conn.as_ref()).map(|c| c.since.clone()),
             last_seen: e.and_then(|e| e.last_seen.clone()),
@@ -298,7 +321,9 @@ impl Reg {
                 .and_then(|(r, _)| r.as_ref())
                 .map(Report::summary),
             form: machine.and_then(|m| m.form.clone()),
-            model: machine.and_then(|m| m.board_product.clone().or_else(|| m.model.clone())),
+            model: machine
+                .and_then(|m| m.board_product.clone().or_else(|| m.model.clone()))
+                .or_else(|| h.and_then(|h| h.facts.model.clone())),
             status: e.and_then(|e| e.status.as_ref()).map(|(s, _)| s.clone()),
             status_at: e.and_then(|e| e.status.as_ref()).map(|(_, at)| at.clone()),
         }
@@ -357,6 +382,34 @@ impl Drop for PreauthSlot {
 
 pub(super) fn busy(msg: impl Into<String>) -> ApiError {
     ApiError::new(ErrorCode::Busy, msg)
+}
+
+/// Whether a hello is a light node's: it says so (`kind`), or its OS does —
+/// "ios" and "ipados" run no agent.
+fn light_hello(h: &Hello) -> bool {
+    h.kind == Some(NodeKind::Light) || matches!(h.os.as_str(), "ios" | "ipados")
+}
+
+/// What a verb for a light node answers: it takes none.
+fn light_takes_none(id: &str) -> ApiError {
+    ApiError::new(
+        ErrorCode::Unsupported,
+        format!("machine {id} is a light node: it reports its telemetry and takes no commands"),
+    )
+}
+
+impl DesiredEntry {
+    /// A light node's entry as the registry keeps it: a policy that asks
+    /// for nothing and grants nothing, no lemonade offered, no link alert.
+    fn hold_light(&mut self) {
+        self.policy = Policy {
+            awake_hold: false,
+            claude_remote_control: false,
+            ..Policy::default()
+        };
+        self.offer_lemonade = false;
+        self.alert_link = false;
+    }
 }
 
 /// What the controller knows about the machines (module doc).
@@ -439,7 +492,7 @@ impl Registry {
             if d.state != DesiredState::Approved || !d.policy.santree {
                 continue;
             }
-            if reg.state_of(id) != NodeState::Approved {
+            if reg.state_of(id) != NodeState::Approved || reg.light(id) {
                 continue;
             }
             if let Some(e) = reg.nodes.get(id) {
@@ -591,13 +644,24 @@ impl Registry {
                 e.close();
             }
         }
+        // A light node is sent no policy and no command (`Reg::light`).
+        let light = light_hello(&hello)
+            || reg
+                .desired
+                .get(&id)
+                .is_some_and(|d| d.kind == NodeKind::Light);
         let policy = reg
             .desired
             .get(&id)
-            .filter(|d| d.state == DesiredState::Approved)
+            .filter(|d| d.state == DesiredState::Approved && !light)
             .map(|d| reg.effective(d));
         let queued = if state == NodeState::Approved {
-            reg.queued.remove(&id).unwrap_or_default()
+            let queued = reg.queued.remove(&id).unwrap_or_default();
+            if light {
+                Vec::new()
+            } else {
+                queued
+            }
         } else {
             Vec::new()
         };
@@ -683,6 +747,9 @@ impl Registry {
     /// `unavailable` when no subscriber's queue took the event: the app is
     /// not listening, and the machine says so rather than wait.
     pub(super) fn policy_request(&self, id: &str, req: &PolicyRequest) -> Result<(), ApiError> {
+        if self.lock().light(id) {
+            return Err(light_takes_none(id));
+        }
         req.check()
             .map_err(|e| ApiError::new(ErrorCode::BadRequest, e))?;
         {
@@ -728,6 +795,7 @@ impl Registry {
     pub(super) fn record(&self, id: &str, conn_id: u64, e: &str, p: Value) {
         let mut reg = self.lock();
         let approved = reg.state_of(id) == NodeState::Approved;
+        let light = reg.light(id);
         let Some(entry) = reg.nodes.get_mut(id) else {
             return;
         };
@@ -735,7 +803,9 @@ impl Registry {
             return;
         }
         entry.touch();
-        if !approved {
+        // A light node reports its telemetry and a status that says what
+        // its hello did; no other document is its to push, and none is kept.
+        if !approved || (light && !matches!(e, name::TELEMETRY | name::STATUS)) {
             return;
         }
         let at = now_rfc3339();
@@ -815,7 +885,12 @@ impl Registry {
 
     /// The app's complete set of decided keys (module doc). The caller
     /// has checked each entry (ids are their keys' node ids, no id twice).
-    pub fn set_desired(&self, set: Vec<DesiredEntry>) -> SetDesiredOk {
+    pub fn set_desired(&self, mut set: Vec<DesiredEntry>) -> SetDesiredOk {
+        // A light node's entry, whatever policy came with it: none it could
+        // serve, so no santree grant reaches the allow-list below.
+        for d in set.iter_mut().filter(|d| d.kind == NodeKind::Light) {
+            d.hold_light();
+        }
         // One set at a time, the session host's allow-list before the
         // registry and its policy events (session_host.rs).
         let _one = self.apply.lock_ok();
@@ -838,6 +913,7 @@ impl Registry {
                     Desired {
                         public_key: d.public_key,
                         state: d.state,
+                        kind: d.kind,
                         policy: d.policy,
                         name: d.name,
                         offer_lemonade: d.offer_lemonade,
@@ -889,8 +965,14 @@ impl Registry {
                     .iter()
                     .map(|_| self.next_request.fetch_add(1, Ordering::Relaxed))
                     .collect();
+                let light = reg.light(&id);
                 let entry = reg.nodes.get(&id).expect("connected");
                 match (was, now) {
+                    // A light node is told where it stands, and nothing else.
+                    (w, NodeState::Approved) if w != NodeState::Approved && light => {
+                        entry.send(wire::event(name::STATE, &StateEvent { state: now }));
+                        ok.approved.push(id.clone());
+                    }
                     (w, NodeState::Approved) if w != NodeState::Approved => {
                         entry.send(wire::event(name::STATE, &StateEvent { state: now }));
                         entry.send(wire::event(name::POLICY, &policy));
@@ -903,7 +985,7 @@ impl Registry {
                         }
                         ok.approved.push(id.clone());
                     }
-                    (NodeState::Approved, NodeState::Approved) => {
+                    (NodeState::Approved, NodeState::Approved) if !light => {
                         let old_policy = old.get(&id).map(|d| reg.effective(d));
                         if old_policy != policy {
                             entry.send(wire::event(name::POLICY, &policy));
@@ -946,6 +1028,9 @@ impl Registry {
                     format!("machine {id} is {}, not approved", other.as_str()),
                 ))
             }
+        }
+        if reg.light(id) {
+            return Err(light_takes_none(id));
         }
         let req = self.next_request.fetch_add(1, Ordering::Relaxed);
         let waiting = match reg.nodes.get_mut(id).and_then(|e| e.conn.as_mut()) {
@@ -1229,6 +1314,9 @@ impl Registry {
                 ))
             }
         }
+        if reg.light(id) {
+            return Err(light_takes_none(id));
+        }
         let offers = reg
             .nodes
             .get(id)
@@ -1308,6 +1396,7 @@ impl Registry {
             os: String,
             agent_version: String,
             connected: bool,
+            light: bool,
             offer_lemonade: bool,
             telemetry: Option<Telemetry>,
             claude: Option<Report>,
@@ -1324,7 +1413,8 @@ impl Registry {
                 .keys()
                 .filter_map(|id| {
                     let d = reg.decided(id)?;
-                    (d.state == DesiredState::Approved).then(|| (id.clone(), d.alert_link))
+                    (d.state == DesiredState::Approved)
+                        .then(|| (id.clone(), d.alert_link && !reg.light(id)))
                 })
                 .collect();
             alerts.sort();
@@ -1347,6 +1437,7 @@ impl Registry {
                         os: h.os.clone(),
                         agent_version: h.agent_version.clone(),
                         connected,
+                        light: reg.light(id),
                         offer_lemonade: d.offer_lemonade,
                         // A machine that left says nothing but its `link_up`
                         // (below): only a connected one's are copied.
@@ -1391,16 +1482,19 @@ impl Registry {
                 u8::from(r.connected)
             ));
             if let Some(t) = &r.telemetry {
-                out.push_str(&crate::telemetry::metrics_text(
-                    t,
-                    &r.agent_version,
-                    &labels,
-                ));
+                let text = if r.light {
+                    crate::telemetry::light_metrics_text
+                } else {
+                    crate::telemetry::metrics_text
+                };
+                out.push_str(&text(t, &r.agent_version, &labels));
             }
             // A connected machine's Claude, from its last report; a machine
             // that left says nothing (its `link_up` is 0), rather than a
             // state it may no longer be in.
-            if r.connected {
+            // A light node runs no Claude and no providers: no series of
+            // either, rather than a `claude_up` of 0.
+            if r.connected && !r.light {
                 out.push_str(&crate::telemetry::claude_text(r.claude.as_ref(), &labels));
                 // Its providers likewise: an asleep machine's model server
                 // is Machine Link Down's business, not Model Server Down's.

@@ -19,6 +19,8 @@ let
       (crate + "/Cargo.lock")
       (crate + "/build.rs")
       (crate + "/src")
+      (crate + "/core/Cargo.toml")
+      (crate + "/core/src")
     ];
   };
   # That source's store path is content-addressed: its hash names the source

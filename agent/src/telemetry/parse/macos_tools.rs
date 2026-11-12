@@ -405,6 +405,7 @@ pub fn parse_pmset(text: &str) -> Option<Battery> {
         health_pct: None,
         cycles: None,
         condition: None,
+        low_power: None,
     })
 }
 

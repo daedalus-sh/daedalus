@@ -67,6 +67,13 @@
 //! that set is the only thing that changes the machine. No subscriber
 //! queue took the event: refused `unavailable`, the app is not listening.
 //!
+//! **Light nodes** (link/wire.rs `NodeKind`; registry.rs `Reg::light`): a
+//! key whose hello says so, whose OS is "ios" or "ipados", or that the app's
+//! set marks — approved, pending and revoked like any other, and asked
+//! nothing: no policy, no command or verb (`unsupported`, never queued), no
+//! santree grant, only its telemetry and status kept, and no link alert on
+//! `/nodes/metrics`, since it is on the link only while its app is open.
+//!
 //! **santree** (session_host.rs): a machine's policy carries the session
 //! host's address and key while the app turns santree on for it
 //! (registry.rs `effective`), and the host's allow-list is written from each

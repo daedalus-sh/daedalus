@@ -13,4 +13,9 @@ cycles: number | null,
  * The OS's own verdict on the battery, as it words it: "Normal",
  * "Service Recommended".
  */
-condition: string | null, };
+condition: string | null, 
+/**
+ * Low Power Mode is on: a phone's or a tablet's word (a light node).
+ * None where the OS has no such switch or nobody reads it.
+ */
+low_power: boolean | null, };

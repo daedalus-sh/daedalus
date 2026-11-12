@@ -210,7 +210,7 @@ impl Keys {
     /// (module doc). A rotation whose grace period ended while the
     /// controller was down is retired at once.
     pub fn load(dir: &Path) -> Result<Self> {
-        let current = Identity::load_or_create_at(&dir.join(identity::FILE))?;
+        let current = crate::identity::load_or_create_at(&dir.join(identity::FILE))?;
         let next_path = dir.join(NEXT_FILE);
         let rot_path = dir.join(ROTATION_FILE);
         let record: Option<Record> = match std::fs::read_to_string(&rot_path) {
@@ -228,7 +228,7 @@ impl Keys {
             }
         };
         let next_id = if next_path.exists() {
-            match Identity::load_at(&next_path) {
+            match crate::identity::load_at(&next_path) {
                 Ok(id) => Some(id),
                 Err(e) => {
                     tracing::error!(
@@ -327,7 +327,7 @@ impl Keys {
         }
         let next_path = dir.join(NEXT_FILE);
         let _ = std::fs::remove_file(&next_path);
-        let id = Identity::load_or_create_at(&next_path).map_err(|e| format!("{e:#}"))?;
+        let id = crate::identity::load_or_create_at(&next_path).map_err(|e| format!("{e:#}"))?;
         let record = record_for(&l.current, &id, grace);
         let cert = crate::link::tls::certified(&id).map_err(|e| format!("{e:#}"))?;
         write_record(dir, &record).map_err(|e| format!("writing {ROTATION_FILE}: {e}"))?;
@@ -583,7 +583,7 @@ mod tests {
         let keys = Keys::load(&dir).unwrap();
         let old = keys.forward();
         // A next key without its record: signed again, the rotation runs.
-        let next = Identity::load_or_create_at(&dir.join(NEXT_FILE)).unwrap();
+        let next = crate::identity::load_or_create_at(&dir.join(NEXT_FILE)).unwrap();
         drop(keys);
         let keys = Keys::load(&dir).unwrap();
         assert_eq!(keys.forward().public_key_hex(), next.public_key_hex());

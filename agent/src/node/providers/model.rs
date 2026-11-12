@@ -139,20 +139,7 @@ pub enum ProviderStartup {
     Missing,
 }
 
-/// Whether the provider should run.
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum PowerWanted {
-    Start,
-    Stop,
-}
-
-impl std::fmt::Display for PowerWanted {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        crate::util::wire_name(self, f)
-    }
-}
+pub use daedalus_core::link::wire::PowerWanted;
 
 /// Where an install stands. The last three are how it ended.
 #[cfg_attr(test, derive(ts_rs::TS))]

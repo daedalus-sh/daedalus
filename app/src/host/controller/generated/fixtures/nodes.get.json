@@ -2,6 +2,7 @@
   "id": "0123456789abcdef",
   "fingerprint": "0123:4567",
   "state": "approved",
+  "kind": "agent",
   "connected": true,
   "since": "2026-09-27T10:00:00Z",
   "last_seen": "2026-09-27T10:00:15Z",

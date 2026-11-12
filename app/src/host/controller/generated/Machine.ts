@@ -15,8 +15,9 @@ chip: string | null, bios_vendor: string | null, bios_version: string | null,
 bios_date: string | null, board_manufacturer: string | null, board_product: string | null, 
 /**
  * What shape the machine is: "laptop" | "desktop" | "tower" | "mini" |
- * "all-in-one" | "server" | "tablet", from the chassis type (SMBIOS type
- * 3 on Windows, the model name on a Mac). None when not stated.
+ * "all-in-one" | "server" | "tablet" | "phone", from the chassis type
+ * (SMBIOS type 3 on Windows, the model name on a Mac, the device idiom
+ * on iOS). None when not stated.
  */
 form: string | null, 
 /**

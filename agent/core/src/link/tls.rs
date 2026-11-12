@@ -48,8 +48,8 @@ use rustls::{
 use super::{cert, crypto, TICK, WRITE_TIMEOUT};
 use crate::identity::{digest, Identity};
 use crate::ipc::deadline::Deadline;
-use crate::ipc::door::MAX_LINE;
 use crate::ipc::jsonl::LineBuf;
+use crate::ipc::MAX_LINE;
 use crate::net::Sock;
 use crate::util::LockExt;
 
@@ -309,7 +309,7 @@ pub fn pin_refused(e: &io::Error) -> bool {
 
 /// The controller's side: its own certificate, every machine asked for one
 /// (the tests'; the controller resolves its keys, `server_config_resolving`).
-#[cfg(test)]
+#[cfg(any(test, feature = "testing"))]
 pub fn server_config(id: &Identity) -> anyhow::Result<Arc<ServerConfig>> {
     let (certs, key) = certificate_and_key(id);
     let mut config = ServerConfig::builder_with_provider(crypto::provider())
@@ -339,8 +339,7 @@ pub fn pinned_id_of(sni: Option<&str>) -> Option<&str> {
 }
 
 /// An identity as rustls presents it: its certificate and signing key.
-#[cfg(feature = "controller")]
-pub(crate) fn certified(id: &Identity) -> anyhow::Result<Arc<rustls::sign::CertifiedKey>> {
+pub fn certified(id: &Identity) -> anyhow::Result<Arc<rustls::sign::CertifiedKey>> {
     let (certs, key) = certificate_and_key(id);
     let signing = crypto::provider().key_provider.load_private_key(key)?;
     Ok(Arc::new(rustls::sign::CertifiedKey::new(certs, signing)))
@@ -438,7 +437,10 @@ impl Tls {
             match conn.read_tls(&mut sock) {
                 Ok(0) => return Err(io::ErrorKind::UnexpectedEof.into()),
                 Ok(_) => {}
-                Err(e) if is_timeout(&e) => continue,
+                // A signal that interrupted the read (a child of this
+                // process ending) is not the peer's failure: the deadline
+                // above still holds.
+                Err(e) if is_timeout(&e) || e.kind() == io::ErrorKind::Interrupted => continue,
                 Err(e) => return Err(e),
             }
             if let Err(e) = conn.process_new_packets() {
@@ -486,7 +488,7 @@ impl Tls {
     }
 
     /// Bytes as they are, one record, flushed (the tests' tricklers).
-    #[cfg(test)]
+    #[cfg(any(test, feature = "testing"))]
     pub fn send_bytes(&mut self, bytes: &[u8]) -> io::Result<()> {
         self.conn.writer().write_all(bytes)?;
         self.flush()
@@ -615,7 +617,7 @@ impl Tls {
 }
 
 #[cfg(test)]
-pub(crate) mod tests {
+mod tests {
     use super::*;
     use std::net::{TcpListener, TcpStream};
 

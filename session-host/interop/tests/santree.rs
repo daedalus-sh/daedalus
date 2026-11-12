@@ -69,6 +69,7 @@ fn entry(node: &Identity, santree: bool) -> DesiredEntry {
             santree,
             ..Policy::default()
         },
+        kind: daedalus_agent::link::wire::NodeKind::Agent,
         name: Some("MacBook".into()),
         offer_lemonade: false,
         alert_link: true,

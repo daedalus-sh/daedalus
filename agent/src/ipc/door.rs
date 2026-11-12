@@ -13,9 +13,7 @@ use std::time::Duration;
 
 /// Windows' LocalSystem.
 pub const SYSTEM_SID: &str = "S-1-5-18";
-/// The longest line any door of this agent reads or writes: the local
-/// socket, the API, the link.
-pub const MAX_LINE: usize = 1 << 20;
+pub use daedalus_core::ipc::MAX_LINE;
 
 /// One connection's transport, as the os layer hands it over.
 pub struct Conn {

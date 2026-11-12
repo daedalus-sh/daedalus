@@ -499,6 +499,7 @@ pub(super) fn read_battery() -> Option<Battery> {
         health_pct: None,
         cycles: None,
         condition: None,
+        low_power: None,
     })
 }
 

@@ -267,7 +267,7 @@ struct Doors {
 /// This machine's key, made on the first start; None, logged, when it
 /// cannot be had: the box will not hear from this machine.
 fn load_identity() -> Option<crate::identity::Identity> {
-    match crate::identity::Identity::load_or_create() {
+    match crate::identity::load_or_create() {
         Ok(id) => {
             tracing::info!(node = id.node_id(), fingerprint = %id.fingerprint(), "identity loaded");
             Some(id)

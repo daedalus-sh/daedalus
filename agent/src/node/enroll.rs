@@ -60,13 +60,13 @@ use crate::api::wire::{EnrollRedeem, EnrollRedeemed};
 use crate::core::config::Config;
 use crate::core::paths;
 use crate::core::shared::Shared;
-use crate::identity::{format_fingerprint, parse_fingerprint, Identity};
+use crate::identity::{format_fingerprint, parse_fingerprint};
 use crate::ipc::deadline::Deadline;
 use crate::ipc::door::Peer;
 pub use crate::ipc::local::{BeginParams, FinishParams};
 use crate::ipc::rpc::{ApiError, ErrorCode};
 use crate::net::Dialer;
-use crate::node::tunnel::{Settings, Tunnel, WireguardConfig};
+use crate::node::tunnel::{Settings, Tunnel};
 
 /// How long one log-in waits for the browser, and how long the service
 /// keeps its PKCE verifier.
@@ -217,8 +217,8 @@ pub fn begin(shared: &Shared, files: &Files, p: BeginParams) -> Result<Begin, Ap
         return Err(logged_in_already());
     }
     let app = app_url(&p.app_url).map_err(|e| ApiError::new(ErrorCode::BadRequest, e))?;
-    let id =
-        Identity::load_or_create_at(&files.identity).map_err(|e| internal(format!("{e:#}")))?;
+    let id = crate::identity::load_or_create_at(&files.identity)
+        .map_err(|e| internal(format!("{e:#}")))?;
     let verifier = Zeroizing::new(random_token());
     let code_challenge = challenge_of(&verifier);
     shared.link.set_log_in(Some(Started {
@@ -296,8 +296,8 @@ pub fn finish(
     .map_err(unavailable)?;
 
     // Everything the answer says, checked before anything is written.
-    let id =
-        Identity::load_or_create_at(&files.identity).map_err(|e| internal(format!("{e:#}")))?;
+    let id = crate::identity::load_or_create_at(&files.identity)
+        .map_err(|e| internal(format!("{e:#}")))?;
     if answer.node != id.node_id() {
         return Err(unavailable(format!(
             "the app approved node {:?}, not this machine ({})",
@@ -325,9 +325,7 @@ pub fn finish(
         )));
     }
 
-    answer
-        .wireguard
-        .write_at(&files.tunnel)
+    crate::node::tunnel::write_at(&answer.wireguard, &files.tunnel)
         .map_err(|e| internal(format!("{e:#}")))?;
     let tunnel = Tunnel::start(settings.clone()).map_err(|e| {
         let _ = std::fs::remove_file(&files.tunnel);
@@ -432,7 +430,7 @@ pub fn forget_log_in(shared: &Shared, files: &Files, why: &str) -> anyhow::Resul
 /// left (net.rs `Dialer`). A tunnel config that cannot be brought up
 /// refuses every dial instead of letting the link go around it.
 pub fn start(shared: &Shared, files: &Files) {
-    let dialer = match WireguardConfig::load_at(&files.tunnel) {
+    let dialer = match crate::node::tunnel::load_at(&files.tunnel) {
         Ok(None) => Dialer::Direct,
         Ok(Some(settings)) => match Tunnel::start(settings) {
             Ok(t) => Dialer::Tunnel(t),

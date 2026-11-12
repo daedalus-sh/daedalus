@@ -52,6 +52,17 @@ pub fn escape_label(s: &str) -> String {
 /// OS's own counters (network bytes) carry a counter's `_total` suffix,
 /// and a query `rate()`s them.
 pub fn metrics_text(t: &Telemetry, agent_version: &str, labels: &Labels) -> String {
+    render(t, agent_version, labels, false)
+}
+
+/// The same for a light node (link/wire.rs `NodeKind`), without the two
+/// counts an agent always reports and a phone cannot read: services down
+/// and installed applications. A zero there would be a claim.
+pub fn light_metrics_text(t: &Telemetry, agent_version: &str, labels: &Labels) -> String {
+    render(t, agent_version, labels, true)
+}
+
+fn render(t: &Telemetry, agent_version: &str, labels: &Labels, light: bool) -> String {
     let mut out = String::new();
     let esc = escape_label;
     let base = labels.render();
@@ -101,7 +112,9 @@ pub fn metrics_text(t: &Telemetry, agent_version: &str, labels: &Labels) -> Stri
     if let Some(v) = t.process_count {
         gauge("processes", "", f64::from(v));
     }
-    gauge("services_down", "", t.services.len() as f64);
+    if !light {
+        gauge("services_down", "", t.services.len() as f64);
+    }
     for b in &t.browsers {
         gauge(
             "browser_info",
@@ -116,8 +129,13 @@ pub fn metrics_text(t: &Telemetry, agent_version: &str, labels: &Labels) -> Stri
     }
     // One count per kind, in a fixed order so the series set never moves;
     // a kind with nothing installed still reports zero.
-    for kind in ["app", "game", "launcher", "runtime", "driver"] {
-        let n = t.apps.iter().filter(|a| a.kind == kind).count();
+    let kinds: &[&str] = if light {
+        &[]
+    } else {
+        &["app", "game", "launcher", "runtime", "driver"]
+    };
+    for kind in kinds {
+        let n = t.apps.iter().filter(|a| a.kind == *kind).count();
         gauge("apps", &format!("kind=\"{kind}\""), n as f64);
     }
     if let Some(u) = &t.updates {
@@ -201,6 +219,12 @@ pub fn metrics_text(t: &Telemetry, agent_version: &str, labels: &Labels) -> Stri
         }
         if let Some(v) = b.health_pct {
             gauge("battery_health_percent", "", v);
+        }
+        if let Some(v) = b.charging {
+            gauge("battery_charging", "", f64::from(u8::from(v)));
+        }
+        if let Some(v) = b.low_power {
+            gauge("battery_low_power", "", f64::from(u8::from(v)));
         }
     }
     out

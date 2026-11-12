@@ -80,10 +80,10 @@ use crate::ipc::rpc::{ApiError, ErrorCode, Request, Response};
 use crate::link::tls::{self, Recv, Tls};
 use crate::link::wire::{
     self, name, Accepted, ClaudeSessionParams, Command, CommandParams, Hello, HelloFacts, Incoming,
-    NodeState, Policy, RotateParams, StateEvent, Welcome, PROTO,
+    NodeState, Policy, StateEvent, Welcome, PROTO,
 };
 use crate::link::{FoundVia, LinkState};
-use crate::link::{BACKOFF_MAX, BACKOFF_MIN, DEAD_AFTER, HANDSHAKE_TIMEOUT, HEARTBEAT};
+use crate::link::{BACKOFF_MAX, BACKOFF_MIN, DEAD_AFTER, HEARTBEAT};
 
 /// The slowest a push waits when nothing changed.
 pub const PUSH_EVERY: Duration = Duration::from_secs(60);
@@ -148,31 +148,7 @@ pub fn resolve_target(
     }))
 }
 
-/// How one attempt ended.
-#[derive(Debug, PartialEq, Eq)]
-pub enum Ended {
-    /// Asked to stop.
-    Stopped,
-    /// The connection was up and approved or pending, then ended.
-    Dropped(String),
-    /// The controller could not be reached or refused this machine.
-    Failed(String),
-    /// The controller presented another key than the trusted one.
-    /// `presented_unproven` is what its certificate carried, before any
-    /// signature proved the peer holds it: shown, never trusted.
-    KeyChanged {
-        presented_unproven: [u8; 32],
-        pinned: [u8; 32],
-    },
-    /// The box turned this machine away.
-    Revoked,
-    /// The controller speaks another protocol.
-    Version(String),
-    /// The controller handed its trust to a new key, and this machine
-    /// re-pinned from `from` to `new` (the keys's digests): connect again
-    /// under it.
-    Rotated { from: [u8; 32], new: [u8; 32] },
-}
+pub use daedalus_core::link::client::{take_rotate, Ended};
 
 /// What the machine is, for `hello`.
 pub fn hello_of(cfg: &Config, id: &Identity, facts: &crate::core::facts::Facts) -> Hello {
@@ -191,9 +167,11 @@ pub fn hello_of(cfg: &Config, id: &Identity, facts: &crate::core::facts::Facts) 
             os_version: facts.os_version.clone(),
             cpu: facts.cpu.clone(),
             memory_bytes: facts.memory_bytes,
+            model: None,
         },
         capabilities: crate::api::capabilities(cfg, crate::api::Serves::default()),
         telemetry: cfg.telemetry,
+        kind: None,
     }
 }
 
@@ -487,10 +465,6 @@ impl Default for Cadence {
     }
 }
 
-fn io_why(e: &std::io::Error) -> String {
-    e.to_string()
-}
-
 /// One attempt: connect, prove both keys, hello, then the conversation
 /// until it ends.
 pub fn connect_once(
@@ -505,68 +479,27 @@ pub fn connect_once(
     // The keys this attempt was made under: a pairing that moves them ends
     // it (module doc).
     let keys_at = shared.link.keys().1;
-    // Direct, or through this machine's tunnel alone (net.rs).
-    let sock = match shared
-        .link
-        .dialer()
-        .connect(&target.address, HANDSHAKE_TIMEOUT)
-    {
-        Ok(s) => s,
-        Err(e) => return Ended::Failed(e),
-    };
-    let mut tls = match client.connect(sock, target.pin, HANDSHAKE_TIMEOUT) {
-        Ok(t) => t,
-        Err(tls::ConnectError::KeyMismatch {
-            presented_unproven,
-            pinned,
-        }) => {
-            return Ended::KeyChanged {
-                presented_unproven,
-                pinned,
-            }
-        }
-        Err(tls::ConnectError::Io(e)) => return Ended::Failed(format!("TLS: {}", io_why(&e))),
-    };
-    let Some(controller_key) = tls.peer_key() else {
-        return Ended::Failed("the controller presented no key".into());
+    // Direct, or through this machine's tunnel alone (net.rs): the dial,
+    // both keys proved, hello and its answer.
+    let daedalus_core::link::client::Opened {
+        mut tls,
+        welcome,
+        controller_key,
+    } = match daedalus_core::link::client::open(
+        &shared.link.dialer(),
+        client,
+        &target.address,
+        target.pin,
+        &hello,
+    ) {
+        Ok(o) => o,
+        Err(e) => return e,
     };
     let controller_fp = format_fingerprint(&digest(&controller_key));
     shared.link.set_status(|l| {
         l.fingerprint = client.fingerprint().to_string();
         l.controller_fingerprint = Some(controller_fp.clone());
     });
-
-    // hello, and its answer.
-    if let Err(e) = tls.send(&wire::request(1, name::HELLO, &hello)) {
-        return Ended::Failed(format!("hello: {e}"));
-    }
-    let until = Instant::now() + HANDSHAKE_TIMEOUT;
-    let welcome: Welcome = loop {
-        match tls.recv() {
-            Ok(Recv::Line(l)) => match Incoming::parse(&l) {
-                Ok(Incoming::Answer {
-                    id: Some(1),
-                    result: Ok(v),
-                }) => match serde_json::from_value(v) {
-                    Ok(w) => break w,
-                    Err(e) => return Ended::Failed(format!("the controller's answer: {e}")),
-                },
-                Ok(Incoming::Answer { result: Err(e), .. }) => {
-                    tls.close();
-                    return match e.code {
-                        ErrorCode::Version => Ended::Version(e.msg),
-                        ErrorCode::Revoked => Ended::Revoked,
-                        _ => Ended::Failed(format!("refused: {}", e.msg)),
-                    };
-                }
-                _ => continue,
-            },
-            Ok(Recv::Idle) if Instant::now() < until => continue,
-            Ok(Recv::Idle) => return Ended::Failed("no answer to hello".into()),
-            Ok(Recv::Closed) => return Ended::Failed("closed before answering hello".into()),
-            Err(e) => return Ended::Failed(format!("hello: {e}")),
-        }
-    };
     tracing::info!(
         address = %target.address,
         state = welcome.state.as_str(),
@@ -971,24 +904,6 @@ fn take_provider_power(shared: &Arc<Shared>, p: Value) -> Result<Accepted, ApiEr
         ));
     }
     Ok(Accepted { accepted: true })
-}
-
-/// Check a rotation statement against `pinned`, the key this connection's
-/// handshake proved (module doc): the new key, when `pinned` signed it.
-pub fn take_rotate(pinned: &[u8; 32], p: Value) -> Result<[u8; 32], ApiError> {
-    let params: RotateParams = serde_json::from_value(p)
-        .map_err(|e| ApiError::new(ErrorCode::BadRequest, format!("rotate: {e}")))?;
-    let new = crate::identity::parse_public_key(&params.new_public_key)
-        .map_err(|e| ApiError::new(ErrorCode::BadRequest, format!("rotate: {e}")))?;
-    let sig = hex::decode(&params.signature)
-        .map_err(|_| ApiError::new(ErrorCode::BadRequest, "rotate: the signature is not hex"))?;
-    if !crate::identity::verify_rotation(pinned, &new, &sig) {
-        return Err(ApiError::new(
-            ErrorCode::Forbidden,
-            "rotate: the statement is not the trusted controller key's; nothing re-pinned",
-        ));
-    }
-    Ok(new)
 }
 
 /// Apply one command from the controller; the answer's body or an error.
