@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import type { Ctx, Gateway } from '../core/ctx'
 import { isRecord } from '../lib/is-record'
 import {
@@ -54,14 +55,14 @@ export type GatewayModel = {
   apiBase: string | null
   timeout: number | null
   modelInfo: Record<string, unknown>
-  tag: { node: string; kind: string; id: string } | null
+  /** The sync's mark, with `rev`, the hash it wrote the route with (null on a route made before revs). */
+  tag: { node: string; kind: string; id: string; rev: string | null } | null
 }
 
-/** The four calls the sync makes. Abstracted so the test can hand it a fake gateway. */
+/** The three calls the sync makes. Abstracted so the test can hand it a fake gateway. */
 export type GatewayClient = {
   info(): Promise<GatewayModel[]>
   add(route: LitellmRoute): Promise<void>
-  update(id: string, route: LitellmRoute): Promise<void>
   remove(id: string): Promise<void>
 }
 
@@ -71,8 +72,45 @@ function tagOf(info: unknown): GatewayModel['tag'] {
   if (!isRecord(info) || !isRecord(info.daedalus)) return null
   const d = info.daedalus
   return typeof d.node === 'string' && typeof d.kind === 'string' && typeof d.id === 'string'
-    ? { node: d.node, kind: d.kind, id: d.id }
+    ? { node: d.node, kind: d.kind, id: d.id, rev: typeof d.rev === 'string' ? d.rev : null }
     : null
+}
+
+/** JSON with every object's keys sorted, so equal routes hash equal. */
+function canonical(v: unknown): string {
+  if (Array.isArray(v)) return `[${v.map(canonical).join(',')}]`
+  if (isRecord(v))
+    return `{${Object.keys(v)
+      .filter((k) => v[k] !== undefined)
+      .sort()
+      .map((k) => `${JSON.stringify(k)}:${canonical(v[k])}`)
+      .join(',')}}`
+  return JSON.stringify(v)
+}
+
+/**
+ * The hash of a route as the sync writes it, `rev` itself left out. The sync
+ * stamps it on the route's tag and compares it on the next tick, rather than
+ * comparing fields against /model/info: LiteLLM answers that with fields it
+ * computed itself (catalog token limits) and without ones it stored as zero,
+ * so a field-by-field comparison never matched and every route was rewritten
+ * every tick.
+ */
+export function revOf(route: LitellmRoute): string {
+  const { rev: _rev, ...tag } = route.model_info.daedalus
+  const body = { ...route, model_info: { ...route.model_info, daedalus: tag } }
+  return createHash('sha256').update(canonical(body)).digest('hex').slice(0, 16)
+}
+
+/** The route with its rev stamped on the tag, as the sync sends it. */
+function stamped(route: LitellmRoute): LitellmRoute {
+  return {
+    ...route,
+    model_info: {
+      ...route.model_info,
+      daedalus: { ...route.model_info.daedalus, rev: revOf(route) },
+    },
+  }
 }
 
 export function gatewayModelsOf(body: unknown): GatewayModel[] {
@@ -120,12 +158,6 @@ function litellmClient(gateway: Gateway): GatewayClient {
     info: async () => gatewayModelsOf(await call('/model/info', { method: 'GET' })),
     add: async (route) => {
       await call('/model/new', { method: 'POST', body: JSON.stringify(route) })
-    },
-    update: async (id, route) => {
-      await call('/model/update', {
-        method: 'POST',
-        body: JSON.stringify({ ...route, model_info: { ...route.model_info, id } }),
-      })
     },
     remove: async (id) => {
       await call('/model/delete', { method: 'POST', body: JSON.stringify({ id }) })
@@ -233,31 +265,13 @@ export function planRoutes(input: {
   return { desired, skipped }
 }
 
-/** Whether a held route already says what the desired one says. */
+/** Whether a held route was written from exactly the desired one. */
 function sameRoute(have: GatewayModel, want: LitellmRoute): boolean {
-  if (have.modelName !== want.model_name) return false
-  if (have.upstream !== want.litellm_params.model) return false
-  if (have.apiBase !== want.litellm_params.api_base) return false
-  if ((have.timeout ?? null) !== (want.litellm_params.timeout ?? null)) return false
-  const keys = [
-    'mode',
-    'supports_function_calling',
-    'supports_vision',
-    'max_input_tokens',
-    'max_output_tokens',
-    'input_cost_per_token',
-    'output_cost_per_token',
-  ] as const
-  for (const k of keys) {
-    const a = have.modelInfo[k]
-    const b = (want.model_info as Record<string, unknown>)[k]
-    if ((a ?? null) !== (b ?? null)) return false
-  }
-  return true
+  return have.tag?.rev === revOf(want)
 }
 
 /**
- * Reconcile: create what is missing, update what changed, delete what the
+ * Reconcile: create what is missing, remake what changed, delete what the
  * sync made for a model that is gone or a provider switched off — and keep
  * what belongs to a provider that did not answer this tick.
  */
@@ -294,18 +308,13 @@ export async function reconcile(
     const want = wanted.get(k)
     if (want !== undefined) {
       if (sameRoute(have, want.route)) summary.kept.push(want.route.model_name)
-      else if (
-        have.modelName === want.route.model_name &&
-        (have.modelInfo.mode ?? null) === want.route.model_info.mode
-      ) {
-        await gw.update(have.id, want.route)
-        summary.updated.push(want.route.model_name)
-      } else {
-        // LiteLLM's update keeps a route's name and its mode whatever the body
-        // says (1.108: a chat route patched to `decisions` stays `chat`): a
-        // rename or a new mode is the old route gone and a new one made.
+      else {
+        // A change is the old route gone and a new one made, never
+        // /model/update: LiteLLM's update keeps a route's name and its mode
+        // whatever the body says (1.108: a chat route patched to `decisions`
+        // stayed `chat`), so a patch cannot be trusted to land.
         await gw.remove(have.id)
-        await gw.add(want.route)
+        await gw.add(stamped(want.route))
         summary.updated.push(want.route.model_name)
       }
       wanted.delete(k)
@@ -322,7 +331,7 @@ export async function reconcile(
     }
   }
   for (const d of wanted.values()) {
-    await gw.add(d.route)
+    await gw.add(stamped(d.route))
     summary.created.push(d.route.model_name)
   }
   return summary

@@ -78,27 +78,28 @@ const reading = (
 function fakeGateway(rows: GatewayModel[]): GatewayClient & { log: string[] } {
   const log: string[] = []
   let n = 0
-  const fromRoute = (id: string, r: LitellmRoute): GatewayModel => ({
-    id,
-    dbModel: true,
-    modelName: r.model_name,
-    upstream: r.litellm_params.model,
-    apiBase: r.litellm_params.api_base,
-    timeout: r.litellm_params.timeout ?? null,
-    modelInfo: { ...r.model_info, id, db_model: true },
-    tag: r.model_info.daedalus,
-  })
+  // As LiteLLM answers /model/info: the zero costs left out, and token
+  // limits from its own catalog added (1.108–1.109), so the reconcile cannot
+  // lean on reading back what it wrote.
+  const fromRoute = (id: string, r: LitellmRoute): GatewayModel => {
+    const { input_cost_per_token: _i, output_cost_per_token: _o, ...info } = r.model_info
+    return {
+      id,
+      dbModel: true,
+      modelName: r.model_name,
+      upstream: r.litellm_params.model,
+      apiBase: r.litellm_params.api_base,
+      timeout: r.litellm_params.timeout ?? null,
+      modelInfo: { max_input_tokens: 4096, max_output_tokens: 4096, ...info, id, db_model: true },
+      tag: { ...r.model_info.daedalus, rev: r.model_info.daedalus.rev ?? null },
+    }
+  }
   return {
     log,
     info: async () => rows,
     add: async (r) => {
       rows.push(fromRoute(`db${String(++n)}`, r))
       log.push(`add ${r.model_name}`)
-    },
-    update: async (id, r) => {
-      const i = rows.findIndex((x) => x.id === id)
-      if (i >= 0) rows[i] = fromRoute(id, r)
-      log.push(`update ${r.model_name}`)
     },
     remove: async (id) => {
       const i = rows.findIndex((x) => x.id === id)
@@ -147,7 +148,7 @@ describe('what /model/info says', () => {
       dbModel: true,
       upstream: 'openai/G',
       timeout: 600,
-      tag: { node: 'pc', kind: 'lemonade', id: 'G' },
+      tag: { node: 'pc', kind: 'lemonade', id: 'G', rev: null },
     })
   })
 })
@@ -199,7 +200,7 @@ describe('the plan', () => {
       apiBase: 'http://gaming-pc.lan:13305/api/v1',
       timeout: 600,
       modelInfo: { max_input_tokens: 100_000, max_output_tokens: 16_384 },
-      tag: { node: 'pc', kind: 'lemonade', id: 'G' },
+      tag: { node: 'pc', kind: 'lemonade', id: 'G', rev: null },
     }
     const loaded = planRoutes({
       readings: [
@@ -295,6 +296,26 @@ describe('the reconcile', () => {
     expect(row?.upstream).toBe('hosted_vllm/vllm-d3-nano')
   })
 
+  it('remakes a route written before revs once, then leaves it alone', async () => {
+    const gw = fakeGateway([])
+    await reconcile(gw, [{ provider: pc, reading: reading([model('G')]) }], () => undefined, 1)
+    const [row] = await gw.info()
+    if (row?.tag == null) throw new Error('no route')
+    row.tag = { ...row.tag, rev: null }
+    gw.log.length = 0
+    const once = await reconcile(
+      gw,
+      [{ provider: pc, reading: reading([model('G')]) }],
+      () => undefined,
+      2,
+    )
+    expect(once.updated).toEqual(['g'])
+    expect(gw.log).toEqual(['remove g', 'add g'])
+    gw.log.length = 0
+    await reconcile(gw, [{ provider: pc, reading: reading([model('G')]) }], () => undefined, 3)
+    expect(gw.log).toEqual([])
+  })
+
   it('keeps the routes of a provider that did not answer, and drops a switched-off one', async () => {
     const gw = fakeGateway([])
     await reconcile(gw, [{ provider: pc, reading: reading([model('G')]) }], () => undefined, 1)
@@ -344,7 +365,7 @@ describe('two models with one plain name', () => {
 })
 
 describe('a node its agent has not reported for', () => {
-  const offered = [{ id: 'r1', tag: { node: 'pc', kind: 'lemonade', id: 'G' } }]
+  const offered = [{ id: 'r1', tag: { node: 'pc', kind: 'lemonade', id: 'G', rev: null } }]
   const held = (): GatewayModel[] =>
     offered.map((o) => ({
       id: o.id,

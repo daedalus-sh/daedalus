@@ -259,9 +259,31 @@ export type LitellmRoute = {
     max_output_tokens?: number
     input_cost_per_token: number
     output_cost_per_token: number
-    /** The sync's mark: which node and provider made this route, so it owns it. */
-    daedalus: { node: string; kind: ProviderKind; id: string }
+    /** A non-chat route names its endpoints, so LiteLLM refuses a chat call to it outright. */
+    enforce_supported_endpoints?: boolean
+    supported_endpoints?: string[]
+    /**
+     * The sync's mark: which node and provider made this route, so it owns it,
+     * and `rev`, the hash of the route as written (host/gateway-sync.ts).
+     */
+    daedalus: { node: string; kind: ProviderKind; id: string; rev?: string }
   }
+}
+
+/**
+ * The endpoints each non-chat mode serves. Declared with
+ * `enforce_supported_endpoints`, they make LiteLLM (1.109+) answer a chat
+ * call to an embedder or a decision model with a clear refusal instead of
+ * passing it to an upstream that cannot serve it.
+ */
+export const MODE_ENDPOINTS: Record<Exclude<ModelMode, 'chat'>, readonly string[]> = {
+  embedding: ['/v1/embeddings'],
+  rerank: ['/v1/rerank'],
+  audio_transcription: ['/v1/audio/transcriptions'],
+  audio_speech: ['/v1/audio/speech'],
+  image_generation: ['/v1/images/generations'],
+  image_edit: ['/v1/images/edits'],
+  decisions: ['/v1/decisions', '/v1/systemone'],
 }
 
 /** Where a kind's OpenAI-compatible surface hangs off its base URL. */
@@ -312,6 +334,9 @@ export function routeFor(input: {
       info.max_input_tokens = input.maxContext - REPLY_RESERVE
       info.max_output_tokens = REPLY_RESERVE
     }
+  } else {
+    info.enforce_supported_endpoints = true
+    info.supported_endpoints = [...MODE_ENDPOINTS[model.mode]]
   }
   return {
     model_name: input.alias,

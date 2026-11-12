@@ -5,6 +5,7 @@ import {
   lemonadeOrigins,
   modelOf,
   modeOf,
+  type ProviderModel,
   providerUiHost,
   routeFor,
   upstreamFor,
@@ -114,6 +115,34 @@ describe('the route a model becomes', () => {
     expect(r.model_info.mode).toBe('rerank')
     expect(upstreamFor('chat', 'x')).toBe('openai/x')
     expect(upstreamFor('decisions', 'user.vllm-d3-nano')).toBe('hosted_vllm/user.vllm-d3-nano')
+  })
+
+  it('declares the endpoints of a non-chat route, and leaves a chat route open', () => {
+    const route = (m: ProviderModel) =>
+      routeFor({
+        node: 'n',
+        kind: 'lemonade',
+        base: 'http://h:13305',
+        model: m,
+        alias: 'a',
+        maxContext: null,
+      })
+    const decider = route({
+      ...gemma,
+      id: 'vllm-d3-nano',
+      labels: ['classification', 'systemone'],
+      mode: 'decisions',
+    })
+    expect(decider.model_info).toMatchObject({
+      enforce_supported_endpoints: true,
+      supported_endpoints: ['/v1/decisions', '/v1/systemone'],
+    })
+    expect(route({ ...gemma, mode: 'embedding' }).model_info.supported_endpoints).toEqual([
+      '/v1/embeddings',
+    ])
+    const chat = route(gemma).model_info
+    expect(chat.enforce_supported_endpoints).toBeUndefined()
+    expect(chat.supported_endpoints).toBeUndefined()
   })
 
   it('knows where each kind hangs its OpenAI surface', () => {
