@@ -62,6 +62,13 @@ Its `testflight` job ships a green `main` to TestFlight once the repository vari
 | `ASC_KEY_ID`, `ASC_ISSUER_ID` | An App Store Connect API key (Admin role) |
 | `ASC_KEY_P8_BASE64` | That key's `.p8`, base64 |
 
-Signing is cloud-managed with that key. One step is by hand, once: create the app in App Store
-Connect with the bundle id in `Config/App.xcconfig`. The version is `MARKETING_VERSION` there; the
+Signing is cloud-managed with that key. By hand, once:
+
+1. Register the bundle id `com.santiagotoscanini.daedalus` (App IDs, explicit) at
+   <https://developer.apple.com/account/resources/identifiers/add/bundleId>.
+2. Create the app with it at <https://appstoreconnect.apple.com/apps> (the **+** beside "Apps", New App,
+   platform iOS).
+3. On a Mac with the key's `.p8` in `~/Downloads`: `ios/scripts/setup-ci.sh` (it sets the three secrets
+   and the variable). The key itself is made at <https://appstoreconnect.apple.com/access/integrations/api>.
+ The version is `MARKETING_VERSION` there; the
 build number is the workflow's run number.
