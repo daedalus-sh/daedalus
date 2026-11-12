@@ -294,12 +294,16 @@ export async function reconcile(
     const want = wanted.get(k)
     if (want !== undefined) {
       if (sameRoute(have, want.route)) summary.kept.push(want.route.model_name)
-      else if (have.modelName === want.route.model_name) {
+      else if (
+        have.modelName === want.route.model_name &&
+        (have.modelInfo.mode ?? null) === want.route.model_info.mode
+      ) {
         await gw.update(have.id, want.route)
         summary.updated.push(want.route.model_name)
       } else {
-        // LiteLLM's update keeps a route's name whatever the body says: a
-        // rename is the old route gone and a new one made.
+        // LiteLLM's update keeps a route's name and its mode whatever the body
+        // says (1.108: a chat route patched to `decisions` stays `chat`): a
+        // rename or a new mode is the old route gone and a new one made.
         await gw.remove(have.id)
         await gw.add(want.route)
         summary.updated.push(want.route.model_name)

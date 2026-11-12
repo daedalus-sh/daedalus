@@ -276,6 +276,25 @@ describe('the reconcile', () => {
     expect(gw.log.some((l) => l.includes('cfg'))).toBe(false)
   })
 
+  it('remakes a route whose mode changed, since the LiteLLM update would not carry it', async () => {
+    const gw = fakeGateway([])
+    const decider = (mode: ProviderModel['mode']) =>
+      model('vllm-d3-nano', { labels: ['classification', 'systemone'], mode })
+    await reconcile(gw, [{ provider: pc, reading: reading([decider('chat')]) }], () => undefined, 1)
+    gw.log.length = 0
+    const fixed = await reconcile(
+      gw,
+      [{ provider: pc, reading: reading([decider('decisions')]) }],
+      () => undefined,
+      2,
+    )
+    expect(fixed.updated).toEqual(['vllm-d3-nano'])
+    expect(gw.log).toEqual(['remove vllm-d3-nano', 'add vllm-d3-nano'])
+    const [row] = await gw.info()
+    expect(row?.modelInfo.mode).toBe('decisions')
+    expect(row?.upstream).toBe('hosted_vllm/vllm-d3-nano')
+  })
+
   it('keeps the routes of a provider that did not answer, and drops a switched-off one', async () => {
     const gw = fakeGateway([])
     await reconcile(gw, [{ provider: pc, reading: reading([model('G')]) }], () => undefined, 1)
