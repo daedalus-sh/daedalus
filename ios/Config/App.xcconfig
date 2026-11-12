@@ -1,0 +1,20 @@
+// Single source of truth for app identity and versioning.
+// CI overrides CURRENT_PROJECT_VERSION with the workflow run number.
+
+DEVELOPMENT_TEAM = H8M3SN9RDZ
+PRODUCT_BUNDLE_IDENTIFIER = com.santiagotoscanini.daedalus
+INFOPLIST_KEY_CFBundleDisplayName = Daedalus
+INFOPLIST_KEY_LSApplicationCategoryType = public.app-category.utilities
+
+MARKETING_VERSION = 0.1.0
+CURRENT_PROJECT_VERSION = 1
+
+IPHONEOS_DEPLOYMENT_TARGET = 27.0
+TARGETED_DEVICE_FAMILY = 1,2
+
+// Privacy
+INFOPLIST_KEY_NSCameraUsageDescription = Daedalus uses the camera to scan the QR code that pairs it with your box.
+// At home the box's WireGuard socket is a LAN address, so the app's own tunnel sends to the local network.
+INFOPLIST_KEY_NSLocalNetworkUsageDescription = Daedalus reaches your box directly when you are on its network.
+// daedalus://pair links (the QR code in Settings › Devices) open the app.
+INFOPLIST_FILE = Config/Info.plist

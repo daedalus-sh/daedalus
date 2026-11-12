@@ -1,0 +1,55 @@
+[package]
+name = "daedalus-ios"
+version = "0.1.0"
+edition = "2021"
+# The shared crate's (agent/core/Cargo.toml); rust-toolchain.toml pins the
+# same release.
+rust-version = "1.95"
+description = "The daedalus iOS app as a light node: its key, its WireGuard tunnel to the box, its link to the controller, and a loopback CONNECT proxy for URLSession."
+repository = "https://github.com/daedalus-sh/daedalus"
+license = "MIT"
+publish = false
+
+[lib]
+name = "daedalus_ios"
+path = "src/lib.rs"
+# staticlib: what the app links (ios/scripts/build-core.sh wraps it in an
+# xcframework). rlib: the tests and the examples.
+crate-type = ["staticlib", "rlib"]
+
+[dependencies]
+# The key, the tunnel, the link: one copy, the agent's too.
+daedalus-core = { path = "../../agent/core" }
+rand_core = { version = "0.6", features = ["getrandom"] }
+base64 = "0.22"
+hex = "0.4"
+zeroize = "1"
+tracing = "0.1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# The proxy credential compared in constant time (proxy.rs).
+subtle = "2"
+
+# SO_NOSIGPIPE on the proxy's sockets (proxy.rs `quiet`): a staticlib in an
+# app has no Rust runtime start-up to ignore SIGPIPE for it.
+[target.'cfg(target_vendor = "apple")'.dependencies]
+libc = "0.2"
+
+[dev-dependencies]
+# The in-process WireGuard peer the proxy's end-to-end test stands on.
+daedalus-core = { path = "../../agent/core", features = ["testing"] }
+# examples/probe.rs prints what the library logs.
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "ansi"] }
+
+# Small, like the agent's — except `panic`, which stays at its default
+# (unwind) on purpose: this library lives inside an app, and a panic on one
+# thread should end that thread's work, not the app; it is also what makes
+# ffi.rs's `catch_unwind` mean something. The agent, a service a supervisor
+# restarts, aborts instead.
+# `strip` takes the debug info only: a static archive keeps its symbols for
+# the app's link, and Xcode strips the final binary.
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = "debuginfo"

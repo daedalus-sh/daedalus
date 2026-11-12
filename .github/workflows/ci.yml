@@ -12,7 +12,7 @@
 #              the host agents' scripts built, which shellchecks them
 #   shell      shellcheck over the shell scripts nix never wraps
 #   workflows  actionlint and zizmor over every file in .github/workflows
-#   advisories cargo audit over the three Cargo.lock files and pnpm audit --prod
+#   advisories cargo audit over the four Cargo.lock files and pnpm audit --prod
 #              over app/ and website/ (weekly and by hand only)
 #   codeql     CodeQL's JavaScript/TypeScript and Actions queries; findings land
 #              in the Security tab rather than failing the run
@@ -151,6 +151,7 @@ jobs:
             agent/install.sh agent/e2e-tunnel.sh agent/gate.sh
             agent/macos/package.sh agent/macos/icons/render.sh
             session-host/gate.sh
+            ios/core/gate.sh ios/scripts/build-core.sh
             release/image-walk.sh
 
   workflows:
@@ -176,7 +177,7 @@ jobs:
           # finding is a one-line fix and belongs in front of the push.
           advanced-security: false
 
-  # Known advisories against what the lockfiles pin: the three Cargo.lock
+  # Known advisories against what the lockfiles pin: the four Cargo.lock
   # files and the two pnpm projects' production dependencies. Weekly (and by
   # hand) only — a new advisory arrives without a push. A finding fails the
   # run; nothing is installed or built.
@@ -195,7 +196,7 @@ jobs:
       - name: cargo audit
         run: |
           failed=0
-          for lock in agent/Cargo.lock session-host/Cargo.lock session-host/interop/Cargo.lock; do
+          for lock in agent/Cargo.lock session-host/Cargo.lock session-host/interop/Cargo.lock ios/core/Cargo.lock; do
             echo "::group::$lock"
             nix run --inputs-from . nixpkgs#cargo-audit -- audit --file "$lock" || failed=1
             echo "::endgroup::"

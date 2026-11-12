@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Only keys Xcode can't generate from INFOPLIST_KEY_* build settings; merged with the generated plist. -->
+<plist version="1.0">
+<dict>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.santiagotoscanini.daedalus.pair</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>daedalus</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>

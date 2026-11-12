@@ -1,0 +1,5 @@
+# actionlint's table of GitHub-hosted runner labels is older than the image
+# with Xcode 27; the iOS workflow names it.
+self-hosted-runner:
+  labels:
+    - xcode-27

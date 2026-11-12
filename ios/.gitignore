@@ -1,0 +1,16 @@
+.DS_Store
+xcuserdata/
+*.xcuserstate
+DerivedData/
+build/
+.build/
+.swiftpm/
+*.ipa
+*.dSYM.zip
+*.xcarchive
+*.xcresult
+# App Store Connect API keys never belong in git
+*.p8
+# Built by scripts/build-core.sh from core/ (Rust)
+Packages/DaedalusKit/Frameworks/
+core/target/

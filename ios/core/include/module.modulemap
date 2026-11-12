@@ -1,0 +1,4 @@
+module DaedalusCoreFFI {
+    header "daedalus_ios.h"
+    export *
+}
