@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import type { Ctx } from '../../core/ctx'
-import { type MachineNames, wireName, wirePolicy } from '../../lib/agent/policy'
+import { isLightOs } from '../../lib/agent/light'
+import { lightPolicy, type MachineNames, wireName, wirePolicy } from '../../lib/agent/policy'
 import { netNameOf } from '../../lib/nodes-file'
 import type { NodePolicy, NodeState } from '../schema'
 import { readSite } from '../site'
@@ -42,6 +43,8 @@ export type DecidedRow = {
   /** What its agent last said, for the names a policy spells (`MachineNames`). */
   hostname: string
   lanIp: string | null
+  /** What its hello said it runs: a phone or tablet is held to `lightPolicy`. */
+  os?: string
 }
 
 /** The domains every machine's names sit under: the LAN's and the box's. */
@@ -49,7 +52,7 @@ export type Domains = Pick<MachineNames, 'lanDomain' | 'baseDomain'>
 
 /** An approved key's entry: its policy and, when it has one, the name the pages show. */
 function approvedEntry(r: DecidedRow, key: string, domains: Domains): DesiredNode {
-  const policy = r.policy ?? {}
+  const policy = isLightOs(r.os) ? lightPolicy(r.policy ?? {}) : (r.policy ?? {})
   const name = wireName(policy)
   const names: MachineNames = {
     ...domains,
@@ -62,6 +65,8 @@ function approvedEntry(r: DecidedRow, key: string, domains: Domains): DesiredNod
     state: 'approved',
     policy: wirePolicy(policy, names),
     ...(name === undefined ? {} : { name }),
+    // The controller forgets a phone's hello on a restart; this keeps it light until it links again.
+    ...(isLightOs(r.os) ? { kind: 'light' as const } : {}),
   }
 }
 

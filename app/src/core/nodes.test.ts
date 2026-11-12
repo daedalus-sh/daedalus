@@ -25,6 +25,8 @@ const h = vi.hoisted(() => ({
   sets: [] as Record<string, unknown>[],
   transactions: 0,
   facts: null as Record<string, unknown> | null,
+  tokensDropped: [] as string[],
+  commands: [] as unknown[],
 }))
 
 vi.mock('../host/db', () => {
@@ -82,6 +84,12 @@ vi.mock('../host/gateway-sync', () => ({
     h.gateway++
   },
 }))
+vi.mock('../host/node-tokens', () => ({
+  revokeNodeToken: async (id: string) => {
+    h.tokensDropped.push(id)
+    return true
+  },
+}))
 vi.mock('../host/session-host', () => ({
   readSessionHost: async () => (h.sessionHost ? {} : null),
 }))
@@ -101,6 +109,88 @@ beforeEach(() => {
   h.facts = null
   h.synced = 0
   h.sessionHost = true
+  h.tokensDropped = []
+  h.commands = []
+})
+
+describe('a phone or tablet', () => {
+  const controller = {
+    call: async (m: string, p: unknown) => {
+      h.commands.push([m, p])
+      return { delivered: true, queued: false }
+    },
+  }
+  const withController = { controller } as unknown as Ctx
+
+  it('loses its API token with a revoke and with a forget', async () => {
+    await flows.revokeNode(ctx, 'n1')
+    await flows.forgetNode(ctx, 'n1')
+    await flows.forgetNode(ctx, 'n1', { left: true })
+    expect(h.tokensDropped).toEqual(['n1', 'n1', 'n1'])
+  })
+
+  it('takes no command, and a machine does', async () => {
+    h.rows = [[{ id: 'n1', os: 'ios' }], [{ id: 'n2', os: 'macos' }], []]
+    expect(await flows.sendNodeCommand(withController, 'n1', 'check_update')).toEqual({
+      ok: false,
+      reason: 'An iPhone takes no commands from the box.',
+    })
+    expect(h.commands).toEqual([])
+    expect((await flows.sendNodeCommand(withController, 'n2', 'check_update')).ok).toBe(true)
+    expect(h.commands).toEqual([['nodes.command', { id: 'n2', command: 'check_update' }]])
+    expect(await flows.sendNodeCommand(withController, 'n3', 'check_update')).toEqual({
+      ok: false,
+      reason: 'No such machine.',
+    })
+  })
+
+  it('is refused santree', async () => {
+    h.rows = [[{ id: 'n1', state: 'approved', os: 'ipados', publicKey: 'ab'.repeat(32) }]]
+    const r = await flows.grantSantree(ctx, { id: 'n1', fingerprint: 'x', by: 'alice' })
+    expect(r).toEqual({ ok: false, reason: 'A phone or tablet runs no santree.' })
+  })
+
+  it('has what it says about itself kept while it is connected', async () => {
+    h.rows = [
+      [
+        { id: 'p1', state: 'approved', os: 'ios', device: null },
+        { id: 'p2', state: 'approved', os: 'ios', device: null },
+        { id: 'm1', state: 'approved', os: 'macos', device: null },
+      ],
+    ]
+    const asked: unknown[] = []
+    const c = {
+      controller: {
+        call: async (m: string, p: { id: string }) => {
+          asked.push([m, p.id])
+          return {
+            agent_version: '1.2.0',
+            model: null,
+            status: { os_version: '26.1', version: '1.2.0', memory_bytes: 8 },
+            telemetry: {
+              machine: { model: 'iPhone17,1' },
+              battery: { percent: 80, charging: true },
+              disks: [{ total_bytes: 100, free_bytes: 40 }],
+              memory: { total_bytes: 8 },
+            },
+          }
+        },
+      },
+    } as unknown as Ctx
+    const seen = (id: string, connected: boolean) => ({ id, connected }) as never
+    await flows.recordObserved(c, [seen('p1', true), seen('p2', false), seen('m1', true)])
+    // Only the connected phone is asked about, and only it is written.
+    expect(asked).toEqual([['nodes.get', 'p1']])
+    expect(h.sets).toHaveLength(1)
+    expect(h.sets[0]?.device).toMatchObject({
+      model: 'iPhone17,1',
+      osVersion: '26.1',
+      appVersion: '1.2.0',
+      battery: { percent: 80, charging: true },
+      storage: { totalBytes: 100, freeBytes: 40 },
+      memoryBytes: 8,
+    })
+  })
 })
 
 describe('a decision about a machine', () => {

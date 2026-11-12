@@ -3,6 +3,7 @@ import type { MachinesData } from '../../../lib/dashboard/machines'
 import { Ago } from '../../ago'
 import { BoxProvider, GatewaySync } from '../provider-models'
 import { ASIDE, Band, Mono, NOTE_SHOWN, SECTIONS, Section } from '../shared'
+import { AddPhone } from './add-phone'
 import { Install } from './install'
 import { BACK } from './machine-cells'
 import { MachineRow, MachinesHead, PendingRow } from './machine-section'
@@ -29,7 +30,7 @@ import { SessionHost, SessionHostRestart } from './session-host'
 //
 // This file is the tab: the machine table (./machine-section.tsx, its cells ./machine-cells.tsx); the trust buttons are
 // ./decision.tsx, the policy rows ./policy.tsx over ./use-policy-editor.ts,
-// the install lines ./install.tsx, the controller's key rotation ./rotate.tsx, the
+// the install lines ./install.tsx, a phone's code ./add-phone.tsx and its cells ./light.tsx, the controller's key rotation ./rotate.tsx, the
 // session host's line ./session-host.tsx.
 
 export function Machines({ d }: { d: MachinesData }) {
@@ -164,8 +165,13 @@ export function Machines({ d }: { d: MachinesData }) {
 
       <Section
         title="How a machine joins"
-        description="One line per system, carrying this box's controller and the key to pin."
-        body={<Install controller={c} />}
+        description="One line per system, carrying this box's controller and the key to pin. A phone or tablet scans a code instead."
+        body={
+          <>
+            <Install controller={c} />
+            <AddPhone canPair={d.canPair} />
+          </>
+        }
       />
     </div>
   )

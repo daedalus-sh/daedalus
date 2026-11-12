@@ -107,6 +107,30 @@ describe('the desired set', () => {
     expect(nodes.map((n) => n.id)).toEqual([...nodes.map((n) => n.id)].sort())
   })
 
+  it('holds a phone to nothing running and no link alert, whatever its row says', () => {
+    const { nodes } = desiredSet(
+      [
+        {
+          ...row(KEY_A, 'approved', {
+            awakeHold: true,
+            claudeRemoteControl: true,
+            santree: true,
+            alertLinkDown: true,
+            displayName: 'Phone',
+          }),
+          os: 'ios',
+        },
+      ],
+      DOMAINS,
+    )
+    expect(nodes[0]?.name).toBe('Phone')
+    expect(nodes[0]?.policy?.policy.awake_hold).toBe(false)
+    expect(nodes[0]?.policy?.policy.claude_remote_control).toBe(false)
+    expect(nodes[0]?.policy?.policy.santree).toBe(false)
+    expect(nodes[0]?.policy?.alert_link).toBe(false)
+    expect(nodes[0]?.policy?.offer_lemonade).toBe(false)
+  })
+
   it('leaves out a row whose key is not hex, and says so', () => {
     const { nodes, skipped } = desiredSet(
       [
@@ -207,6 +231,7 @@ describe('what the controller observed', () => {
     lan_ip: '192.168.0.121',
     mac: 'aa:bb:cc:dd:ee:ff',
     claude: null,
+    kind: 'agent',
     form: null,
     model: null,
     status: null,
@@ -249,6 +274,7 @@ describe('enrolment', () => {
     lan_ip: '192.168.0.120',
     mac: 'aa:bb:cc:dd:ee:ff',
     claude: null,
+    kind: 'agent',
     form: null,
     model: null,
     public_key: KEY_A.toUpperCase(),

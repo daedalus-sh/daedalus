@@ -57,7 +57,7 @@ export function fingerprintOf(publicKeyHex: string): string {
 }
 
 /** 32 random bytes, base64url: a form token, a code. */
-const token = (): string => randomBytes(32).toString('base64url')
+export const token = (): string => randomBytes(32).toString('base64url')
 
 /** What a code is stored as. */
 export const codeHash = (code: string): string =>
@@ -194,8 +194,42 @@ export function clientName(hostname: string): string {
   return `daedalus-${slug === '' ? 'machine' : slug}`.slice(0, 32)
 }
 
-/** wg-easy's per-client firewall is off until something turns it on; a log-in does, once. */
-async function ensureFirewall(wg: WgEasy): Promise<boolean> {
+/**
+ * A new wg-easy client, confined: AllowedIPs the box's LAN address alone and
+ * a per-client firewall of exactly `firewallIps` (`<address>:<port>/tcp`
+ * each). Its config, read back and checked. `onCreated` hears the client's id
+ * the moment it exists, so a caller can delete it when a later step throws.
+ * Shared by a Mac's log-in and a phone's pairing (host/pair.ts).
+ */
+export async function confinedClient(
+  wg: WgEasy,
+  opts: {
+    name: string
+    lanIp: string
+    firewallIps: readonly string[]
+    onCreated: (clientId: number) => void
+  },
+): Promise<{ clientId: number; config: EnrollRedeemed['wireguard'] }> {
+  const only = `${opts.lanIp}/32`
+  const clientId = await wg.createClient(opts.name)
+  opts.onCreated(clientId)
+  const made = await wg.getClient(clientId)
+  await wg.updateClient(clientId, {
+    ...made,
+    allowedIps: [only],
+    firewallIps: [...opts.firewallIps],
+    mtu: TUNNEL_MTU,
+    persistentKeepalive: TUNNEL_KEEPALIVE,
+  })
+  const config = parseWgQuick(await wg.configuration(clientId))
+  if (config.allowed_ips.length !== 1 || config.allowed_ips[0] !== only) {
+    throw new Error('wg-easy kept another AllowedIPs for the client')
+  }
+  return { clientId, config }
+}
+
+/** wg-easy's per-client firewall is off until something turns it on: a log-in or a pairing, once. */
+export async function ensureFirewall(wg: WgEasy): Promise<boolean> {
   const iface = await wg.getInterface()
   if (iface.firewallEnabled === true) return false
   await wg.updateInterface({ ...iface, firewallEnabled: true })
@@ -310,22 +344,19 @@ export async function confirmEnroll(
 
   try {
     if (await ensureFirewall(deps.wg)) log("enroll: wg-easy's per-client firewall turned on")
-    clientId = await deps.wg.createClient(clientName(q.name))
-    const made = await deps.wg.getClient(clientId)
-    await deps.wg.updateClient(clientId, {
-      ...made,
-      allowedIps: [`${deps.lanIp}/32`],
+    const made = await confinedClient(deps.wg, {
+      name: clientName(q.name),
+      lanIp: deps.lanIp,
       firewallIps: [
         `${deps.hostAlias}:${String(port)}/tcp`,
         `${deps.hostAlias}:${String(deps.sessionHostPort)}/tcp`,
       ],
-      mtu: TUNNEL_MTU,
-      persistentKeepalive: TUNNEL_KEEPALIVE,
+      onCreated: (c) => {
+        clientId = c
+      },
     })
-    const config = parseWgQuick(await deps.wg.configuration(clientId))
-    if (config.allowed_ips.length !== 1 || config.allowed_ips[0] !== `${deps.lanIp}/32`) {
-      throw new Error('wg-easy kept another AllowedIPs for the client')
-    }
+    clientId = made.clientId
+    const { config } = made
     old = await deps.store.tunnelOf(id)
     mapped = true
     await deps.store.setTunnel(id, { clientId, address: config.address })

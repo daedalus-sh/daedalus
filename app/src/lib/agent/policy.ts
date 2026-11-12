@@ -83,6 +83,22 @@ export function wirePolicy(p: NodePolicy, names: MachineNames): DesiredPolicy {
   }
 }
 
+/**
+ * The policy a phone or tablet is held to, whatever its row says: nothing
+ * runs there, and its link being down is its normal state (lib/agent/light.ts),
+ * so it never alerts.
+ */
+export function lightPolicy(p: NodePolicy): NodePolicy {
+  const { providers: _providers, claudeWorkdir: _workdir, ...rest } = p
+  return {
+    ...rest,
+    awakeHold: false,
+    claudeRemoteControl: false,
+    santree: false,
+    alertLinkDown: false,
+  }
+}
+
 /** A machine as the network names it: `<netName>.<lanDomain>`, its address, the box's domain. */
 export type MachineNames = {
   netName: string

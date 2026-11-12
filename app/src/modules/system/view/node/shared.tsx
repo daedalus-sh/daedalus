@@ -3,6 +3,7 @@ import { HeadStrip, OS_MARK } from '../../../../components/machine-head'
 import { EMPTY, FOOT, LIST, MONO, ROW, ROW_MAIN } from '../../../../components/tokens'
 import { Board } from '../../../../components/viz'
 import type { Telemetry } from '../../../../host/controller/generated'
+import { lightKind } from '../../../../lib/agent/light'
 import type { BoxHead as BoxHeadData } from '../../../../lib/dashboard/box-head'
 import type { NodeSystemData } from '../../../../lib/dashboard/node-system'
 import { bytes, DASH, since } from '../../../../lib/format'
@@ -85,6 +86,7 @@ export function MachineHead({
 }) {
   const { node, status } = d
   const t = d.telemetry ?? null
+  if (node.light) return <LightHead d={d} />
   const edition = status?.os_name || node.os
   const awake =
     node.connected === null
@@ -134,6 +136,52 @@ export function MachineHead({
     />
   )
 }
+/** "iOS" or "iPadOS", as Apple writes the system a light node runs. */
+export const lightOsName = (os: string): string => (os === 'ipados' ? 'iPadOS' : 'iOS')
+
+/**
+ * A phone's or tablet's strip. It is connected only while its app is open, so
+ * away is its usual state: when it was last seen, in the strip's own muted
+ * ink, and never a chip. What it is comes from the live document when there
+ * is one and from what the box kept of it (`node.device`) when there is not.
+ */
+function LightHead({
+  d,
+}: {
+  d: Pick<NodeSystemData, 'node' | 'status'> & { telemetry?: Telemetry | null }
+}) {
+  const { node, status } = d
+  const model = d.telemetry?.machine.model ?? node.device?.model ?? null
+  const version = status?.os_version || node.device?.osVersion || null
+  const line = [
+    lightKind(node.os),
+    model,
+    version === null ? null : `${lightOsName(node.os)} ${version}`,
+  ]
+    .filter((x) => x !== null && x !== '')
+    .join(' · ')
+  return (
+    <HeadStrip
+      compact
+      mark={OS_MARK[node.os]}
+      name={node.name}
+      title={line}
+      aside={
+        node.connected === null ? (
+          'link unknown'
+        ) : node.connected ? (
+          'connected'
+        ) : (
+          <>
+            last seen <Ago at={node.lastSeenAt} />
+          </>
+        )
+      }
+      line={line}
+    />
+  )
+}
+
 /**
  * What the page can say when there is no document to draw: the controller
  * holds nothing from the machine, or no sample yet. Returned in place of the

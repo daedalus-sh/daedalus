@@ -19,7 +19,13 @@ const nodeId = asValidator(withMessage(obj({ id: nodeIdField }), 'expected a nod
  */
 export const approveNodeFn = adminFn.validator(nodeId).handler(async ({ data, context }) => {
   const { approveNode, enrollNode } = await import('../core/nodes')
+  const { nodeById } = await import('../lib/repo/nodes')
+  const { isLightOs } = await import('../lib/agent/light')
   const ctx = await context.ctx()
+  // A revoke deleted a phone's tunnel and token: approval alone brings back neither.
+  if (isLightOs((await nodeById(data.id))?.os)) {
+    throw new Error('Pair the device again with “Add a phone or tablet”.')
+  }
   if (await approveNode(ctx, data.id, context.actor)) return { ok: true }
   return {
     ok: await enrollNode(
@@ -56,8 +62,10 @@ export const sendNodeCommandFn = adminFn
     ),
   )
   .handler(async ({ data, context }) => {
-    const ctx = await context.ctx()
-    return ctx.controller.call('nodes.command', { id: data.id, command: data.command })
+    const { sendNodeCommand } = await import('../core/nodes')
+    const sent = await sendNodeCommand(await context.ctx(), data.id, data.command)
+    if (!sent.ok) throw new Error(sent.reason)
+    return sent.value
   })
 
 /**
@@ -85,7 +93,29 @@ export const rotateControllerKeyFn = adminFn
  */
 export const fetchMachinesFn = readFn.handler(async ({ context }) => {
   const { loadMachines } = await import('../lib/dashboard/machines')
+  const { sweepTickets } = await import('../host/pair')
+  const { pairStore } = await import('../lib/repo/pair')
+  const { wgEasy } = await import('../host/wg-easy')
+  // A pairing code nobody scanned goes, with its tunnel, when the list is next read.
+  await sweepTickets({ store: pairStore, wg: wgEasy() })
   return loadMachines(await context.ctx())
+})
+
+/**
+ * "Add a phone or tablet" (host/pair.ts `addPhone`): a confined tunnel, a
+ * single-use ticket, and the pair link as a QR code. The one answer here that
+ * holds a secret — shown once, kept nowhere.
+ */
+export const addPhoneFn = adminFn.handler(async ({ context }) => {
+  const { addPhone } = await import('../host/pair')
+  const { pairDeps } = await import('../host/pair-deps')
+  const deps = await pairDeps()
+  if (deps === null) return { ok: false as const, reason: 'This box cannot make tunnels yet.' }
+  const offer = await addPhone(deps, { actor: context.actor })
+  // The link stays on the server: the QR code is all the page draws.
+  return offer.ok
+    ? { ok: true as const, value: { svg: offer.value.svg, expiresAt: offer.value.expiresAt } }
+    : offer
 })
 
 /** A change to a policy, recorded under who made it (the card's "Last changed by"). */

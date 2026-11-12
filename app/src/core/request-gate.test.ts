@@ -1,7 +1,14 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { EXEMPT, gate, isOpen, READER_TOKEN_HEADER, verdictOf } from './request-gate'
+import {
+  EXEMPT,
+  EXEMPT_PREFIXES,
+  gate,
+  isOpen,
+  READER_TOKEN_HEADER,
+  verdictOf,
+} from './request-gate'
 
 // The gate in front of every request: who may be served without traefik's
 // proof. Each refusal below is somebody on a shared bridge dialling the
@@ -63,6 +70,38 @@ describe('a request without it', () => {
       '/api/healthz%2F..%2Fsettings',
     ]) {
       expect(verdictOf(req(path)), path).toBe('unproven')
+    }
+  })
+})
+
+describe('the native app’s API', () => {
+  const proved = { 'x-proxy-proof': PROOF }
+
+  it('reaches its own auth under its prefix, proxied or dialled, read or write', async () => {
+    for (const [path, method] of [
+      ['/api/v1/me', 'GET'],
+      ['/api/v1/updates/run', 'POST'],
+      ['/api/v1/machines/0123456789abcdef', 'GET'],
+    ] as const) {
+      expect(verdictOf(req(path, {}, method)), path).toBe('exempt')
+      expect(isOpen(req(path, {}, method)), path).toBe(true)
+      expect(await gate(req(path, proved, method), () => Promise.resolve(false))).toBeNull()
+      expect(await gate(req(path, {}, method), () => Promise.resolve(false))).toBeNull()
+    }
+  })
+
+  it('is the prefix with its slash, and nothing that only resembles it', () => {
+    for (const path of ['/api/v1', '/api/v10/me', '/api/v1x/me', '/API/v1/me', '/x/api/v1/me']) {
+      expect(verdictOf(req(path)), path).toBe('unproven')
+      expect(isOpen(req(path)), path).toBe(false)
+    }
+  })
+
+  it('has a route behind every prefix', () => {
+    const routes = readdirSync(join(import.meta.dirname, '..', 'routes'))
+    for (const prefix of Object.keys(EXEMPT_PREFIXES)) {
+      const file = `${prefix.replace(/^\/|\/$/g, '').replaceAll('/', '.')}.$.ts`
+      expect(routes, prefix).toContain(file)
     }
   })
 })

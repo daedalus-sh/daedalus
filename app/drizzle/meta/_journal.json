@@ -218,6 +218,13 @@
       "when": 1793990164915,
       "tag": "0030_drop_app_storage",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1794511074459,
+      "tag": "0031_phone_nodes",
+      "breakpoints": true
     }
   ]
 }

@@ -1,4 +1,10 @@
-import type { NodeDetail, NodeSummary, PolicyRequest } from '../host/controller/generated'
+import type {
+  Command,
+  CommandOk,
+  NodeDetail,
+  NodeSummary,
+  PolicyRequest,
+} from '../host/controller/generated'
 import {
   enrollValues,
   observedFacts,
@@ -10,6 +16,7 @@ import { fingerprintOf, releaseTunnel } from '../host/enroll'
 import { requestGatewaySync } from '../host/gateway-sync'
 import type { NodePolicy } from '../host/schema'
 import { readSessionHost } from '../host/session-host'
+import { deviceFactsFrom, isLightOs, lightKind, sameDeviceFacts } from '../lib/agent/light'
 import { keepLifecycle } from '../lib/agent/policy-patch'
 import { netNameOf } from '../lib/nodes-file'
 import { enrollStore } from '../lib/repo/enroll'
@@ -23,11 +30,13 @@ import {
   type PolicyPatch,
   setApproved,
   setRevoked,
+  writeDevice,
   writeObserved,
   writePolicy,
   writePolicyRequest,
   writeSantreeOn,
 } from '../lib/repo/nodes'
+import type { Result } from '../lib/result'
 import type { Ctx } from './ctx'
 
 // The decisions about a machine, and what follows each. The rows are
@@ -123,6 +132,7 @@ export async function grantSantree(
   if (n === undefined || n.state !== 'approved') {
     return { ok: false, reason: 'This machine is not approved.' }
   }
+  if (isLightOs(n.os)) return { ok: false, reason: 'A phone or tablet runs no santree.' }
   if (fingerprintOf(n.publicKey) !== input.fingerprint) {
     return { ok: false, reason: 'This machine has another key now; reload the page.' }
   }
@@ -156,6 +166,8 @@ export async function enrollNode(ctx: Ctx, detail: NodeDetail, by: string): Prom
 }
 
 export async function revokeNode(ctx: Ctx, id: string): Promise<boolean> {
+  // A phone's API token first: the credential ends before anything else does.
+  await dropNodeToken(id)
   const updated = await setRevoked(id)
   await afterDecision(ctx)
   if (updated && (await hasTunnel(id))) {
@@ -182,6 +194,7 @@ export async function forgetNode(
   id: string,
   opts: { left?: boolean } = {},
 ): Promise<boolean> {
+  await dropNodeToken(id)
   if (await hasTunnel(id)) {
     if (opts.left !== true && (await setRevoked(id))) await syncNow(ctx)
     await releaseTunnel({ store: enrollStore, wg: await boxWgEasy() }, id)
@@ -189,6 +202,40 @@ export async function forgetNode(
   const gone = await deleteNode(id)
   await afterDecision(ctx)
   return gone
+}
+
+/**
+ * Delete the node's API token (host/node-tokens.ts), if it has one. A table
+ * that cannot be written is logged and the decision goes on: every call
+ * checks the row's state, and a forgotten row takes its token with it.
+ */
+async function dropNodeToken(id: string): Promise<void> {
+  try {
+    const { revokeNodeToken } = await import('../host/node-tokens')
+    if (await revokeNodeToken(id)) console.info(`nodes: ${id}'s API token deleted`)
+  } catch (e) {
+    console.warn(
+      `nodes: ${id}'s API token not deleted: ${e instanceof Error ? e.message : String(e)}`,
+    )
+  }
+}
+
+/**
+ * One instruction to one machine, through the controller: what the Machines
+ * page's buttons and the native app's API both send. A phone or tablet takes
+ * none: it runs no updater of ours and no Claude.
+ */
+export async function sendNodeCommand(
+  ctx: Pick<Ctx, 'controller'>,
+  id: string,
+  command: Command,
+): Promise<Result<CommandOk>> {
+  const n = await nodeById(id)
+  if (n === undefined) return { ok: false, reason: 'No such machine.' }
+  if (isLightOs(n.os)) {
+    return { ok: false, reason: `An ${lightKind(n.os)} takes no commands from the box.` }
+  }
+  return { ok: true, value: await ctx.controller.call('nodes.command', { id, command }) }
 }
 
 /** Whether the node logged in with a tunnel of its own; a table that cannot be read says no. */
@@ -237,7 +284,8 @@ export async function recordObserved(
   const byId = new Map(seen.map((s) => [s.id, s]))
   const moved: { id: string; facts: Partial<NodeRecord> }[] = []
   let dhcp = await dhcpHostsMissing()
-  for (const n of await allNodeRows()) {
+  const rows = await allNodeRows()
+  for (const n of rows) {
     const s = byId.get(n.id)
     if (s === undefined || n.state !== 'approved') continue
     const facts = observedFacts(n, s)
@@ -248,6 +296,7 @@ export async function recordObserved(
     }
   }
   await writeObserved(moved)
+  await recordDevices(ctx, rows, byId)
   if (dhcp) await publishDhcpHosts(ctx)
   // A new address is a new origin for its Lemonade (lib/agent/policy.ts).
   if (moved.some((m) => m.facts.lanIp !== undefined)) requestDesiredSync(ctx)
@@ -277,5 +326,30 @@ async function publishDhcpHosts(ctx: Pick<Ctx, 'controller'>): Promise<void> {
     )
   } catch (e) {
     console.warn(`dhcp hosts not written: ${e instanceof Error ? e.message : String(e)}`)
+  }
+}
+
+/**
+ * Keep what each connected phone or tablet says about itself (lib/agent/
+ * light.ts): it is connected only while its app is open, and the controller
+ * forgets it on a restart. One `nodes.get` per connected light node, and a
+ * write only when a fact moved. Best effort.
+ */
+async function recordDevices(
+  ctx: Pick<Ctx, 'controller'>,
+  rows: readonly NodeRecord[],
+  seen: ReadonlyMap<string, NodeSummary>,
+): Promise<void> {
+  for (const n of rows) {
+    if (n.state !== 'approved' || !isLightOs(n.os) || seen.get(n.id)?.connected !== true) continue
+    try {
+      const d = await ctx.controller.call('nodes.get', { id: n.id, full: true })
+      const facts = deviceFactsFrom(d, n.device, new Date().toISOString())
+      if (facts !== null && !sameDeviceFacts(facts, n.device)) await writeDevice(n.id, facts)
+    } catch (e) {
+      console.warn(
+        `nodes: ${n.id}'s device facts not kept: ${e instanceof Error ? e.message : String(e)}`,
+      )
+    }
   }
 }

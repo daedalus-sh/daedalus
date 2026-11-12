@@ -34,9 +34,10 @@ import type { McpIdentity } from './tokens'
 //
 // ── shapes ────────────────────────────────────────────────────────────────
 //
-// zod is here, and in ops-tools.ts beside it, and nowhere else in this codebase. The SDK types `inputSchema`
-// as a zod schema, so a tool's arguments have to be expressed in it; every
-// other boundary in the app still uses the hand-rolled decoder in
+// zod is here, in ops-tools.ts beside it, and in the native app's API
+// (host/api/v1/handle.ts), and nowhere else in this codebase. The SDK types
+// `inputSchema` as a zod schema, so a tool's arguments have to be expressed in
+// it; every other boundary in the app still uses the hand-rolled decoder in
 // `lib/contract/decode.ts`, and should stay that way.
 
 /** Everything a tool call gets to know about its caller. */

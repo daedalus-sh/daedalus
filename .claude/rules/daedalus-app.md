@@ -55,13 +55,20 @@ A service that runs and appears nowhere is a bug, the same as a broken page.
   where GitHub returns the App manifest's `?code&state`. The `api.*.ts`
   server routes are only what an
   outside caller needs — healthz, the sign-in (`api.auth.$`), the GitHub push webhook, a Mac's
-  log-in (`agent/enroll`), app-icon, profile-picture, and the two image
+  log-in (`agent/enroll`), a phone's pairing (`node/pair`), the native
+  app's API (`v1/$`, one splat), app-icon, profile-picture, and the two image
   servers — `shot-run` for a
   shotter run's frames and `deploy-shot` for an app's post-deploy
-  screenshot. No route is a "scriptable twin" of a button: the UI's
-  writes go through server functions (`src/server/**`) and an agent's
-  through the MCP tools at `/mcp` (`host/mcp/`) — those are the two
-  doors onto a flow.
+  screenshot. **Three doors onto a flow, each for one kind of caller**: the
+  UI's reads and writes are server functions (`src/server/**`), an agent's
+  are the MCP tools at `/mcp` (`host/mcp/`), and the native app's are
+  `/api/v1` (`host/api/v1/`, whose contract is `ios/docs/api.md` — a change
+  to a response type in `lib/api-v1.ts` is a change there, with a line in
+  its Changes). Each door is thin: it authenticates its own caller and
+  calls the lib or host function the other two call. Logic that only one
+  door can reach is trapped; move it to `core/` or `host/` first. No route
+  is a "scriptable twin" of a button, and `/api/v1` is not one for a
+  browser or an agent to use.
 - **The dashboard modules — `src/modules/<id>/`**: one directory per
   category page (actions, ai, database, gaming, health, home, mail, media,
   monitoring, network, system),
@@ -135,7 +142,7 @@ A service that runs and appears nowhere is a bug, the same as a broken page.
   `lib/repo/*`. `ctx.ts` is the capability set above; `auth.ts` /
   `session.ts` / `authz.ts` are who is calling and whether they may (the
   Auth.js session over `oidc-config.ts`, `assertAdmin`, and
-  `assertMachineActor` for the MCP token); `builds/` is the
+  `assertMachineActor` for the MCP token and a node's token); `builds/` is the
   scheduler, dispatch, sweep and GitHub reporting. `core/settings/` is the
   read-only reader behind `/settings` (`index.ts` assembles env +
   /export + snapshots into `BoxSettings`; `integrations.ts` is the
@@ -173,8 +180,8 @@ A service that runs and appears nowhere is a bug, the same as a broken page.
   imports) puts it in the browser chunk of every route that uses the
   function; `host/boundary.test.ts` fails on it.
 - `src/lib/repo/` — drizzle repositories (apps, builds, deployments,
-  enroll codes, github deliveries, local admins, MCP tokens, nodes,
-  settings, and `pool.ts` for the probe, a cross-repository transaction and
+  enroll codes, github deliveries, local admins, MCP tokens, nodes, node
+  tokens, a phone's pairing tickets, settings, and `pool.ts` for the probe, a cross-repository transaction and
   shutdown) and the ONLY importer of `host/db.ts` — the boundary test
   fails on any other, static or dynamic. A repository reads and writes
   rows; what follows a write (a sync, a DHCP line, a tunnel) is `core/`

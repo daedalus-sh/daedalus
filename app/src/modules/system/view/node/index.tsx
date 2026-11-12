@@ -1,11 +1,14 @@
 import type { NavIconName } from '../../../../components/nav-icon'
+import { isLightOs } from '../../../../lib/agent/light'
 import type { NodeSystemData } from '../../../../lib/dashboard/node-system'
 import { NodeBoardView } from './board'
 import { NodeBrowsersView } from './browsers'
 import { NodeBuildView } from './build'
+import { NodeDeviceView } from './device'
 import { NodeDisksView } from './disks'
 import { NodeGraphicsView } from './graphics'
 import { NodeHostView } from './host'
+import { NodeIosView } from './ios'
 import { NodeMacosView } from './macos'
 import { NodeMemoryView } from './memory'
 import { NoDocument } from './shared'
@@ -17,7 +20,7 @@ export { BoxHead, MachineHead } from './shared'
 // The System page for a machine that is not this box, drawn from the one
 // document its agent publishes — and shaped to the KIND of machine.
 //
-// Three kinds of node, three tab rows. Four tabs are the machine as a
+// Four kinds of node, four tab rows. Four tabs are the machine as a
 // machine and are the same everywhere: Host, Memory, Disks, Build, with the
 // box's ids so `?tab=memory` means the memory of whichever machine is picked.
 // After them the row is the operating system's own story:
@@ -28,7 +31,12 @@ export { BoxHead, MachineHead } from './shared'
 // - a Mac has none of that. Its firmware moves with macOS, Apple publishes
 //   one list of what is newer with notes, and its apps come from the App
 //   Store, Homebrew and a folder; so it gets macOS and Apps;
-// - any other OS gets Motherboard and Updates only.
+// - any other OS gets Motherboard and Updates only;
+// - a phone or tablet (lib/agent/light.ts) is none of the above: it is
+//   connected only while its app is open and reports a handful of facts, so
+//   its row is two tabs — Device, under Host's id so the picker keeps its
+//   place, and iOS or iPadOS, what Apple has shipped since. No Claude and no
+//   Chromium: neither runs there.
 //
 // The box itself is not a node: its row, with pools, backups and the browser
 // lab, is modules/system/manifest.ts.
@@ -110,7 +118,20 @@ const OTHER_TABS: readonly NodeTabSpec[] = [
   BROWSERS,
 ]
 
+// A light node's row. Both draw from what the box kept of the device
+// (./device.tsx, ./ios.tsx), so they answer while it is away.
+const DEVICE: NodeTabSpec = { id: 'host', label: 'Device', boardSpans: [4, 4, 4] }
+const IOS_TABS: readonly NodeTabSpec[] = [
+  DEVICE,
+  { id: 'ios', label: 'iOS', boardSpans: [4, 8, 12] },
+]
+const IPADOS_TABS: readonly NodeTabSpec[] = [
+  DEVICE,
+  { id: 'ios', label: 'iPadOS', boardSpans: [4, 8, 12] },
+]
+
 export function nodeTabsFor(os: string): readonly NodeTabSpec[] {
+  if (isLightOs(os)) return os === 'ipados' ? IPADOS_TABS : IOS_TABS
   return os === 'windows' ? WINDOWS_TABS : os === 'macos' ? MACOS_TABS : OTHER_TABS
 }
 
@@ -124,16 +145,23 @@ export type NodeTabId =
   | 'software'
   | 'updates'
   | 'macos'
+  | 'ios'
   | 'apps'
   | 'claude'
   | 'browsers'
 
 // Switching the picker keeps the tab. Where the other machine has no such
 // tab, the nearest subject is opened rather than Host: Updates on the box
-// or the PC is macOS on the Mac, and the Mac's Apps are the PC's Software.
+// or the PC is macOS on the Mac, and the Mac's Apps are the PC's Software. A
+// phone has two tabs: the OS's own story lands on its iOS tab, and every
+// other subject it lacks on Device.
+const LIGHT_NEAREST: Record<string, NodeTabId> = { updates: 'ios', macos: 'ios' }
 const NEAREST: Record<string, Record<string, NodeTabId>> = {
-  macos: { updates: 'macos', board: 'macos', software: 'apps', graphics: 'apps' },
-  windows: { macos: 'updates', apps: 'software' },
+  macos: { updates: 'macos', board: 'macos', software: 'apps', graphics: 'apps', ios: 'macos' },
+  windows: { macos: 'updates', apps: 'software', ios: 'updates' },
+  linux: { ios: 'updates' },
+  ios: LIGHT_NEAREST,
+  ipados: LIGHT_NEAREST,
 }
 
 export function resolveNodeTab(os: string, tab: string | undefined): NodeTabId {
@@ -145,6 +173,9 @@ export function resolveNodeTab(os: string, tab: string | undefined): NodeTabId {
 }
 
 export function MachineSystemView({ d, tab }: { d: NodeSystemData; tab: NodeTabId }) {
+  // A phone is away most of the day and its tabs draw from what the box kept,
+  // so a missing document is not "nothing to show" for it.
+  if (d.node.light) return tab === 'ios' ? <NodeIosView d={d} /> : <NodeDeviceView d={d} />
   const ready = d.status !== null && d.telemetry !== null
   return (
     <>

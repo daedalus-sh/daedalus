@@ -476,6 +476,37 @@ remote projects, which ride the same keys.
 
 ---
 
+## Phones and tablets
+
+A phone or tablet running the native app (`ios/`) is a node like the others:
+its own ed25519 key, a row in `nodes`, one link to the controller, a card on
+Settings › Machines and a place in the System picker. It is a *light* one
+(`app/src/lib/agent/light.ts`; what makes it so is its OS, `ios` or `ipados`).
+It runs no Claude, no provider and no session host, the box holds it to a
+policy of nothing (`lightPolicy`), and it is connected only while its app is
+open. So for it "not connected" is the normal state: the pages say when it
+was last seen, Machine Link Down never fires for it (`alert_link` is always
+off), nothing nix builds reads it (it is left out of `site/nodes.json`), and
+the box keeps what it last said about itself in its row (`nodes.device`),
+because the controller forgets everything on a restart.
+
+**It joins by scanning a code** (`app/src/host/pair.ts`). "Add a phone or
+tablet" makes a wg-easy client confined to two ports and a single-use ticket,
+and shows both once as a QR code. The app brings that tunnel up inside
+itself and redeems the ticket at `POST /api/node/pair` with its public key:
+the node is approved under the admin who made the ticket, handed to the
+controller, bound to the tunnel, and given an API token. Pairing the same
+key again replaces the tunnel and the token.
+
+**Its data path is `/api/v1`** (`app/src/host/api/v1/`), JSON over HTTPS
+through that tunnel: the third door onto the flows, beside the pages' server
+functions and the agents' MCP tools, and an adapter like the MCP server —
+every route calls the loader or flow the matching page calls, so a ceremony
+refuses there in the same words. [ios/docs/api.md](ios/docs/api.md) is the
+contract the app is written from.
+
+---
+
 ## The data model
 
 Tables and columns are trimmed to the load-bearing ones; the schema
@@ -594,7 +625,10 @@ codes once expired.
 | Machine → controller → engine | Each machine's one link to the controller — the agent on the box, TCP 7788 on the LAN — and the controller's unix socket in the app's container | TLS 1.3 with each side pinning the other's ed25519 key (the machine's pin from its install line or a later `pair`, which only an administrator can run — a Mac's from its log-in, whose last step runs as root behind the administrator prompt — the tray runs it elevated behind the OS's own prompt, and the agent's local socket has no pairing method, so a local non-admin cannot hand a machine's service to a controller of their own; nothing is trusted on first use, and a machine without a pin stays unpaired and dials nobody); an unknown key waits `pending` at the controller with nothing pushed to it until an admin approves it, which creates its `nodes` row and hands the controller the whole desired set. An approved machine may ask for its own keep-awake, Claude Remote Control and santree OFF (`policy_request`: absolute values, at most ten a minute) — never santree on, which the controller refuses and the app refuses again; santree on is an admin's, on Settings › Machines, through a consent dialog that shows the machine and its full key, the app re-checking the key shown, the row's approval and the session host. The app writes only the keys asked for and sends the set again: the machine changes nothing itself. The socket serves only the uids the controller lists, and takes fixed verbs with a node id |
 | Machine → session host | santree's protocol v1 — terminals, argv exec, file writes — from santree on a machine through the agent's local santree socket, piped by the agent over its own TLS connection to the box's session host, TCP 7789 on the LAN and the system VPN | **santree.sock: the installing user's processes (any of them) → node key → root on the box**: an admitted node key is a login as the operator, who has NOPASSWD sudo. The socket serves root and the user who installed the agent (recorded from `sudo` at install), never whoever holds the console; the agent pins the host's key, which the controller hands it from the host's status file. TLS 1.3 with each side pinning the other's ed25519 key; the host admits only the keys in the allow-list file the controller writes in its own directory (approved nodes whose policy turns santree on; missing or untrustworthy = nobody), re-read every second, and a node that leaves it loses its connections and the PTYs it opened. Revocation rides the controller: a revoke or santree turned off while the controller is down, or while it refuses the app's set, reaches the host with the next set it takes. Confining working directories and writes to the projects root catches client bugs; it is not a boundary |
 | Machine → engine (a Mac's log-in) | `POST /api/agent/enroll`, the one path of the app a machine's service calls, outside the sign-in, on the LAN | A single-use code with a short life, minted by an admin's Confirm on the gated enroll page (a consent page showing the machine and its full key, its one-time form token bound to that admin and that key), bound to the PKCE challenge the agent sent there and redeemed only with its verifier (S256), which never leaves the agent's service. The answer — the machine's wg-easy client config, the controller's pin and in-tunnel address — goes to that service alone; the loopback callback in between carries only the code |
-| Machine's tunnel → box | A Mac's own WireGuard client of the box's wg-easy (UDP 51820, the forwarded port), ended inside the agent's service (boringtun + smoltcp, no utun): AllowedIPs the box's LAN address alone, and the agent dials only the link's and the session host's ports through it | WireGuard's keys; the client's private key reaches the machine once, in the redeem answer, and is kept 0600 by root. **A stolen tunnel key is a LAN presence at the box's address**, so the client carries a per-client firewall (wg-easy's, on with `firewallEnabled`) of those two ports alone; what the netns itself serves (traefik's 80/443, the wg-easy UI) stays reachable, as for every peer. Past the tunnel the node key still gates the controller and the session host. Revoke and log-out delete the client |
+| Machine's tunnel → box | A Mac's own WireGuard client of the box's wg-easy (UDP 51820, the forwarded port), ended inside the agent's service (boringtun + smoltcp, no utun): AllowedIPs the box's LAN address alone, and the agent dials only the link's and the session host's ports through it | WireGuard's keys; the client's private key reaches the machine once, in the redeem answer, and is kept 0600 by root. **A stolen tunnel key is a LAN presence at the box's address**, so the client carries a per-client firewall (wg-easy's, on with `firewallEnabled`) of those two ports alone. wg-easy filters in its container's FORWARD chain, so that covers everything one hop on, traefik's 80/443 included; only what the container itself serves (the wg-easy UI at the tunnel's own address) stays reachable, as for every peer. Past the tunnel the node key still gates the controller and the session host. Revoke and log-out delete the client |
+| Phone → engine (pairing) | `POST /api/node/pair`, outside the sign-in, through the tunnel the ticket came with | A single-use ticket, 256 bits, stored by digest, alive five minutes, minted by an admin's "Add a phone or tablet" and shown once as a QR code beside the tunnel's config. Whoever photographs that code within five minutes pairs a device: the code is the admin's consent, so it is shown on a page only an admin reaches and kept nowhere. The first redeem spends it, right or wrong; the node is approved under that admin's name and appears on Settings › Machines; a ticket nobody redeemed is swept with its tunnel. The body states a public key without proving it, so a key that belongs to a machine that is not a phone is refused |
+| Phone → engine (`/api/v1`) | The native app's reads and writes, through its tunnel, at traefik's 443 | A per-node bearer token (`dnode_…`), matched against a stored SHA-256 digest in constant time before any work, good only while its node is `approved`, replaced by a new pairing and deleted by revoke, forget and the node's own leave. Writes additionally pass `assertMachineActor`'s node-token door and are recorded as `node:<name>`; each runs the button's own flow, ceremonies included. No scopes: the operator's phone stands in for the operator |
+| Phone's tunnel → box | A wg-easy client ended inside the app: AllowedIPs the box's LAN address alone, a per-client firewall of the controller's link port and traefik's 443 | As a Mac's tunnel, without the session host's port. Traefik's 443 is every hostname the box serves on the LAN, each behind its own sign-in — what any LAN client reaches. The private key exists in the QR code and in wg-easy. Revoke, forget and leave delete the client |
 | A Mac's user → its root service | Daedalus Agent.app, which launchd runs as root from `/Library/Application Support/daedalus-agent/` — a folder chain only root can write — never from the user's copy in `/Applications`, where any admin can rename entries | Install and update are one path: a copy (the app's own, or the release's) into a staging folder root alone can reach, made root's and link-free there, checked — its identifier, its version, its service answering with that version — and only then exchanged into place in one rename; nothing is chowned where a user could still change it. The updater also requires Apple's Developer ID signature of the team with the fixed identifiers. The app's first open installs behind one administrator prompt that names the account it serves, which must be the console user's; a recorded operator changes only with `--replace-operator` |
 | Engine → wg-easy | The API on an `--internal` bridge of the two containers, never through traefik | HTTP Basic as wg-easy's one password account (its INIT admin; the credential rendered from the host's sops file into a file the app reads). Password auth is on for this; the UI's browser path is still OIDC-first. Not an escalation: the engine already runs containers as the operator |
 | Engine → host | The controller's `root.run`, and the verbs of its table | The rules in [The root helper](#the-root-helper) |
@@ -609,7 +643,9 @@ a repository's own toolchain cache persists between its builds and could carry
 files forward; the operator's browser session is as privileged as the operator;
 and a leaked MCP write token is as privileged as the UI until it is revoked,
 which is why it is LAN-only, labelled, stamped on every use, and revocable from
-Settings in one click.
+Settings in one click. A phone's node token is the same grant, and useless
+without its tunnel's key beside it: a lost phone is revoked on Settings ›
+Machines, which ends both.
 
 ---
 

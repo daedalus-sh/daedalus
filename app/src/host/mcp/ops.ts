@@ -171,8 +171,12 @@ export async function runQueue(ctx: Ctx, actor: string) {
 
 const quoteLine = (line: string) => lineShape(redactSecrets(line))
 
-/** Errors in the last `hours`, by container, without noise or the nightly reset. */
-export async function errorSummary(ctx: Ctx, hours: number) {
+/**
+ * Errors in the last `hours`, by container, without noise or the nightly
+ * reset. `samples` false leaves the quoted lines out (`top` empty): five
+ * fewer Loki reads, for a caller that shows the counts alone.
+ */
+export async function errorSummary(ctx: Ctx, hours: number, opts: { samples?: boolean } = {}) {
   // Loki answers an empty vector when it cannot be reached, which must not
   // read as a clean box, so ask something that has to be there first.
   const alive = await ctx.loki.scalar('sum(count_over_time({container=~".+"}[5m]))')
@@ -208,7 +212,7 @@ export async function errorSummary(ctx: Ctx, hours: number) {
     .sort((a, b) => b[1] - a[1])
 
   const top = []
-  for (const [container, count] of rows.slice(0, SAMPLES)) {
+  for (const [container, count] of opts.samples === false ? [] : rows.slice(0, SAMPLES)) {
     const entries = await ctx.loki.entries(
       `{container=${ctx.loki.quote(container)}} ${selector.slice(selector.indexOf('}') + 1)}`,
       hours * 60,

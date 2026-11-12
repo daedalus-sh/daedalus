@@ -14,7 +14,13 @@ export const fetchNodeSystemFn = readFn
   .validator(
     asValidator(
       withMessage(
-        obj({ id: nodeIdField, board: flagField, browsers: flagField, macos: flagField }),
+        obj({
+          id: nodeIdField,
+          board: flagField,
+          browsers: flagField,
+          macos: flagField,
+          ios: flagField,
+        }),
         'expected a node id',
       ),
     ),
@@ -25,6 +31,7 @@ export const fetchNodeSystemFn = readFn
       board: data.board,
       browsers: data.browsers,
       macos: data.macos,
+      ios: data.ios,
     })
   })
 

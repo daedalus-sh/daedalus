@@ -7,6 +7,7 @@ import { NodeCommandButton } from '../../node-command'
 import { Button } from '../../ui/button'
 import { useAction } from '../../use-action'
 import { ERROR_NOTE, MONO, NOTE_SHOWN } from '../shared'
+import { LightLink } from './light'
 
 // A machine's trust: waiting, approved or revoked, and the buttons that move
 // it between them. A waiting key is the controller's — it has no row until
@@ -38,8 +39,11 @@ export function Decision({ m }: { m: Machine }) {
     ) : node.state === 'approved' ? (
       <>
         Approved {node.approvedAt !== null && <Ago at={node.approvedAt} />}
-        {node.approvedBy !== null && ` by ${node.approvedBy}`}; {linkWords(node)}.
+        {node.approvedBy !== null && ` by ${node.approvedBy}`};{' '}
+        {node.light ? <LightLink n={node} /> : linkWords(node)}.
       </>
+    ) : node?.light === true ? (
+      'Revoked; its tunnel and token are gone. Pair it again with “Add a phone or tablet”, or forget it.'
     ) : (
       'Revoked; the controller turns its key away. Approve to trust it again, or forget it.'
     )
@@ -48,20 +52,25 @@ export function Decision({ m }: { m: Machine }) {
     <div className="flex flex-col gap-2">
       <p className={NOTE_SHOWN}>{line}</p>
       <div className="flex flex-wrap items-center gap-2">
-        {node?.state !== 'approved' && (
+        {node?.state !== 'approved' && node?.light !== true && (
           <Button size="sm" disabled={busy} onClick={() => act(approveNodeFn)}>
             Approve
           </Button>
         )}
         {node?.state === 'approved' && (
           <>
-            <NodeCommandButton id={node.id} command="check_update" label="Update now" />
+            {/* A phone takes no commands: its app updates from the store. */}
+            {!node.light && (
+              <NodeCommandButton id={node.id} command="check_update" label="Update now" />
+            )}
             <Button size="sm" variant="ghost" disabled={busy} onClick={() => act(revokeNodeFn)}>
               Revoke
             </Button>
           </>
         )}
-        {node?.state === 'revoked' && (
+        {/* A phone can be forgotten outright: forgetting revokes it first, and takes
+            its tunnel and its token with it. */}
+        {(node?.state === 'revoked' || (node?.state === 'approved' && node.light)) && (
           <Button size="sm" variant="ghost" disabled={busy} onClick={() => act(forgetNodeFn)}>
             Forget
           </Button>

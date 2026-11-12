@@ -6,6 +6,7 @@ import { db } from '../../host/db'
 import { householdMacs } from '../../host/dhcp-hosts'
 import { fingerprintOf } from '../../host/enroll'
 import { type NodePolicy, type NodeState, nodes } from '../../host/schema'
+import { type DeviceFacts, isLightOs } from '../agent/light'
 import type { NodeForFile } from '../nodes-file'
 import { netNameOf } from '../nodes-file'
 import { DEFAULT_PORT, NODE_PROVIDER_KINDS, type ProviderKind } from '../providers/kinds'
@@ -63,6 +64,10 @@ export type NodeRow = {
   claude: Summary | null
   /** Seconds since the controller last heard from it (resolved on the server; the page streams). */
   lastSeenAgo: number
+  /** A phone or tablet (lib/agent/light.ts): connected only while its app is open. */
+  light: boolean
+  /** What a light node last said about itself; null for every other machine. */
+  device: DeviceFacts | null
 }
 
 /** The providers a row could offer, every key resolved, for site/nodes.json and the page. */
@@ -109,6 +114,8 @@ function row(
     connected: seen === null ? null : s?.connected === true,
     claude: s?.claude ?? null,
     lastSeenAgo: (Date.now() - lastSeen) / 1000,
+    light: isLightOs(n.os),
+    device: n.device,
   }
 }
 
@@ -172,6 +179,7 @@ export async function decidedRows(): Promise<DecidedRow[]> {
       policy: nodes.policy,
       hostname: nodes.hostname,
       lanIp: nodes.lanIp,
+      os: nodes.os,
     })
     .from(nodes)
 }
@@ -192,7 +200,8 @@ export async function netNameTakenBy(name: string, exceptId: string): Promise<st
         or(sql`${nodes.policy}->>'name' = ${name}`, sql`${nodes.policy}->>'name' IS NULL`),
       ),
     )
-  return candidates.find((n) => netNameOf(n) === name)?.hostname ?? null
+  // A phone has no name on the network: nothing gives it a lease line.
+  return candidates.find((n) => !isLightOs(n.os) && netNameOf(n) === name)?.hostname ?? null
 }
 
 /**
@@ -328,10 +337,18 @@ export async function writeObserved(
 /** What an Apply writes to site/nodes.json: the approved nodes, resolved (lib/nodes-file.ts). */
 export async function nodesForFile(): Promise<NodeForFile[]> {
   const all = await db.select().from(nodes).where(eq(nodes.state, 'approved'))
-  return all.map((n) => ({
-    id: n.id,
-    name: netNameOf(n),
-    os: n.os,
-    providers: providersOf(n.policy ?? {}),
-  }))
+  // Nothing nix builds reads a phone: no name on the network, no provider.
+  return all
+    .filter((n) => !isLightOs(n.os))
+    .map((n) => ({
+      id: n.id,
+      name: netNameOf(n),
+      os: n.os,
+      providers: providersOf(n.policy ?? {}),
+    }))
+}
+
+/** Keep what a light node last said about itself (lib/agent/light.ts). */
+export async function writeDevice(id: string, device: DeviceFacts): Promise<void> {
+  await db.update(nodes).set({ device }).where(eq(nodes.id, id))
 }

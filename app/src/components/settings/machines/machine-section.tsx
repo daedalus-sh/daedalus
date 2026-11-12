@@ -18,6 +18,7 @@ import {
 import { Chip } from '../../viz'
 import { ASIDE, Band, ERROR_NOTE, Mono, NOTE_SHOWN } from '../shared'
 import { Decision } from './decision'
+import { lightFacts, lightSub } from './light'
 import { ClaudeCell, OsMark, osName, StatusCell, TrustNote, TunnelCell } from './machine-cells'
 import { Policy } from './policy'
 
@@ -56,7 +57,7 @@ export function MachinesHead() {
 /** An open machine: a faint well, so its story reads as inside the row and the next row as the next machine. */
 const OPEN = 'bg-foreground/[0.018]'
 
-type Fact = { k: string; v: ReactNode; wide?: boolean; half?: boolean; narrow?: boolean }
+export type Fact = { k: string; v: ReactNode; wide?: boolean; half?: boolean; narrow?: boolean }
 
 /** A machine's facts, label over value, as many to a line as the width takes. */
 function Facts({ facts }: { facts: Fact[] }) {
@@ -179,65 +180,68 @@ export function MachineRow({
   const arch = s?.arch || n.arch
   const agent = s?.version ?? n.agentVersion
 
-  const facts: Fact[] = [
-    ...(s?.cpu ? [{ k: 'Processor', v: <span>{s.cpu}</span> }] : []),
-    ...(s?.memory_bytes != null
-      ? [{ k: 'Memory', v: <span className="tabular-nums">{bytes(s.memory_bytes)}</span> }]
-      : []),
-    {
-      k: 'Machine up',
-      v: (
-        <span className="tabular-nums">
-          {s?.os_uptime_secs == null ? '—' : duration(s.os_uptime_secs)}
-        </span>
-      ),
-    },
-    ...(n.mac !== null ? [{ k: 'Hardware address', v: <Mono>{n.mac}</Mono> }] : []),
-    { k: 'Agent', v: <Mono>{agent}</Mono>, narrow: true },
-    {
-      k: 'Updates',
-      v:
-        s === null ? (
-          <span className={ASIDE}>—</span>
-        ) : s.restart_pending ? (
-          <Chip tone="warn">installed, restarting</Chip>
-        ) : s.update_available !== null ? (
-          <Chip tone="warn">{s.update_available} available</Chip>
-        ) : (
-          <span className={ASIDE}>
-            {s.last_update_result ?? 'not checked yet'}
-            {s.last_update_check !== null && (
-              <>
-                {' · '}
-                <Ago at={s.last_update_check} />
-              </>
-            )}
-          </span>
-        ),
-      half: true,
-    },
-    {
-      k: 'Address',
-      v: n.lanIp === null ? <span className={ASIDE}>—</span> : <Mono>{n.lanIp}</Mono>,
-      narrow: true,
-    },
-    { k: 'Claude', v: <ClaudeCell m={m} />, half: true },
-    ...(s?.controller?.tunnel != null
-      ? [{ k: 'Tunnel', v: <TunnelCell t={s.controller.tunnel} />, wide: true }]
-      : []),
-    ...(s?.controller != null
-      ? [{ k: 'Its key', v: <Mono>{s.controller.fingerprint}</Mono>, wide: true }]
-      : []),
-    ...(s?.controller?.rotated != null
-      ? [
-          {
-            k: 'Controller key',
-            v: <span className={ASIDE}>{s.controller.rotated}</span>,
-            wide: true,
-          },
-        ]
-      : []),
-  ]
+  // A phone or tablet says less, and from what the box kept of it (./light.tsx).
+  const facts: Fact[] = n.light
+    ? lightFacts(n, osName(n.os))
+    : [
+        ...(s?.cpu ? [{ k: 'Processor', v: <span>{s.cpu}</span> }] : []),
+        ...(s?.memory_bytes != null
+          ? [{ k: 'Memory', v: <span className="tabular-nums">{bytes(s.memory_bytes)}</span> }]
+          : []),
+        {
+          k: 'Machine up',
+          v: (
+            <span className="tabular-nums">
+              {s?.os_uptime_secs == null ? '—' : duration(s.os_uptime_secs)}
+            </span>
+          ),
+        },
+        ...(n.mac !== null ? [{ k: 'Hardware address', v: <Mono>{n.mac}</Mono> }] : []),
+        { k: 'Agent', v: <Mono>{agent}</Mono>, narrow: true },
+        {
+          k: 'Updates',
+          v:
+            s === null ? (
+              <span className={ASIDE}>—</span>
+            ) : s.restart_pending ? (
+              <Chip tone="warn">installed, restarting</Chip>
+            ) : s.update_available !== null ? (
+              <Chip tone="warn">{s.update_available} available</Chip>
+            ) : (
+              <span className={ASIDE}>
+                {s.last_update_result ?? 'not checked yet'}
+                {s.last_update_check !== null && (
+                  <>
+                    {' · '}
+                    <Ago at={s.last_update_check} />
+                  </>
+                )}
+              </span>
+            ),
+          half: true,
+        },
+        {
+          k: 'Address',
+          v: n.lanIp === null ? <span className={ASIDE}>—</span> : <Mono>{n.lanIp}</Mono>,
+          narrow: true,
+        },
+        { k: 'Claude', v: <ClaudeCell m={m} />, half: true },
+        ...(s?.controller?.tunnel != null
+          ? [{ k: 'Tunnel', v: <TunnelCell t={s.controller.tunnel} />, wide: true }]
+          : []),
+        ...(s?.controller != null
+          ? [{ k: 'Its key', v: <Mono>{s.controller.fingerprint}</Mono>, wide: true }]
+          : []),
+        ...(s?.controller?.rotated != null
+          ? [
+              {
+                k: 'Controller key',
+                v: <span className={ASIDE}>{s.controller.rotated}</span>,
+                wide: true,
+              },
+            ]
+          : []),
+      ]
 
   return (
     <li className={cn(TABLE_ROW, 'block min-h-0 py-0', open && OPEN)}>
@@ -247,11 +251,15 @@ export function MachineRow({
         toggles
         name={n.name}
         sub={
-          <>
-            {edition}
-            {version !== '' && ` · ${version}`}
-            {arch !== '' && ` · ${arch}`}
-          </>
+          n.light ? (
+            lightSub(n, osName(n.os))
+          ) : (
+            <>
+              {edition}
+              {version !== '' && ` · ${version}`}
+              {arch !== '' && ` · ${arch}`}
+            </>
+          )
         }
         os={n.os}
         status={<StatusCell m={m} />}
@@ -262,7 +270,9 @@ export function MachineRow({
         <div className="cursor-auto">
           <Facts facts={facts} />
           <Band>
-            {s?.hold_error != null && <p className={ERROR_NOTE}>The hold failed: {s.hold_error}</p>}
+            {!n.light && s?.hold_error != null && (
+              <p className={ERROR_NOTE}>The hold failed: {s.hold_error}</p>
+            )}
             <TrustNote link={s?.controller ?? null} />
             <Decision m={m} />
           </Band>

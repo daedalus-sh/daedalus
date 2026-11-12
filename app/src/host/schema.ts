@@ -14,6 +14,7 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core'
+import type { DeviceFacts } from '../lib/agent/light'
 // Types, plus the vocabulary tuples the CHECK constraints below are built from.
 // Each value import is a pure leaf of lib/ (no node builtin, no database), so
 // drizzle-kit loads it with the schema and the boundary test has nothing to
@@ -625,9 +626,43 @@ export const nodes = pgTable(
     /// when: the Machines card's "Last changed by" line.
     policyChangedBy: text('policy_changed_by'),
     policyChangedAt: timestamp('policy_changed_at', { withTimezone: true }),
+    /// What a phone or tablet last said it is (lib/agent/light.ts): kept
+    /// because such a node is connected only while its app is open, and the
+    /// controller forgets it on a restart. Null for every other machine.
+    device: jsonb('device').$type<DeviceFacts>(),
   },
   (t) => [check('nodes_state_check', oneOf(t.state, NODE_STATES))],
 )
+
+// The credential a phone or tablet presents to /api/v1 (host/node-tokens.ts):
+// one per node, replaced when the device pairs again, deleted with a revoke,
+// a forget or the node's own leave. Stored by SHA-256 digest; the token
+// exists once, in the pairing's answer. `lastUsedAt` is the only thing a call
+// writes.
+export const nodeTokens = pgTable('node_tokens', {
+  nodeId: text('node_id')
+    .primaryKey()
+    .references(() => nodes.id, { onDelete: 'cascade' }),
+  tokenHash: text('token_hash').notNull().unique(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+})
+
+// The single-use tickets behind "Add a phone or tablet" (host/pair.ts): each
+// names the confined wg-easy client made for it and the admin who made it.
+// Stored by digest. A redeem stamps `spentAt` before it checks anything, so a
+// ticket is spent by its first use, right or wrong; the row goes when the
+// pairing completes, or with its client when it never does (the sweep).
+export const nodePairTickets = pgTable('node_pair_tickets', {
+  ticketHash: text('ticket_hash').primaryKey(),
+  clientId: integer('client_id').notNull().unique(),
+  /** The device's address inside the tunnel, as wg-easy assigned it. */
+  address: text('address').notNull(),
+  createdBy: text('created_by').notNull(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  spentAt: timestamp('spent_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+})
 
 // A logged-in machine's WireGuard client of the box's wg-easy (host/enroll.ts):
 // which client is whose, so a log-out, a revoke or a forget deletes the right

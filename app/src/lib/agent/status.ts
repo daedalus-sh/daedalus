@@ -353,7 +353,14 @@ const network = reads<Network>()(
 )
 
 const battery = reads<Battery>()(
-  obj({ percent: nnum, charging: nbool, health_pct: nnum, cycles: nnum, condition: nstr }),
+  obj({
+    percent: nnum,
+    charging: nbool,
+    health_pct: nnum,
+    cycles: nnum,
+    condition: nstr,
+    low_power: nbool,
+  }),
 )
 
 const browser = reads<Browser>()(

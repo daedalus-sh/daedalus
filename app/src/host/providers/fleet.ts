@@ -106,7 +106,8 @@ const uiUrl = (host: string | null) => (host === null ? null : `https://${host}/
 export async function fleetProviders(ctx: Ctx): Promise<FleetProvider[]> {
   const [box, nodes, { domain }] = await Promise.all([
     boxProviders(ctx),
-    listNodes(ctx).then((all) => all.filter((n) => n.state === 'approved')),
+    // A phone offers no provider.
+    listNodes(ctx).then((all) => all.filter((n) => n.state === 'approved' && !n.light)),
     lanDomain(),
   ])
   return [...box, ...nodes.flatMap((n) => nodeProviders(n, domain, ctx.site.baseDomain))]

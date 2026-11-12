@@ -17,7 +17,8 @@ import { provenByProxy } from './auth'
 //                        request through the app's own routers carries it,
 //                        bypassed paths included.
 //   an exempt path     — the doors that authenticate their caller themselves,
-//                        listed in EXEMPT with the reason each may.
+//                        listed in EXEMPT and EXEMPT_PREFIXES with the reason
+//                        each may.
 //   the reader token   — `X-Reader-Token`, a machine-generated READER_TOKEN
 //                        the host hands this container and the one tool that
 //                        dials the container under the gate (the headless
@@ -45,6 +46,21 @@ export const EXEMPT: Readonly<Record<string, string>> = {
   '/api/github/webhook':
     'an HMAC over the raw body; GitHub arrives through the hooks router, which sets no proof',
   '/api/agent/enroll': 'a single-use code, redeemed only with the PKCE verifier it was bound to',
+  '/api/node/pair': 'a single-use ticket an admin showed once as a QR code, spent by its first use',
+}
+
+/** The path prefixes that authenticate their caller themselves, and why each may. */
+export const EXEMPT_PREFIXES: Readonly<Record<string, string>> = {
+  '/api/v1/':
+    'the native app’s API: a node token, matched against its stored digest before any work, on every route',
+}
+
+/** Whether a path is one of the doors above. */
+export function selfAuthenticating(pathname: string): boolean {
+  return (
+    Object.hasOwn(EXEMPT, pathname) ||
+    Object.keys(EXEMPT_PREFIXES).some((p) => pathname.startsWith(p))
+  )
 }
 
 /** The header the reader token rides in. */
@@ -65,7 +81,7 @@ function readerTokenMatches(sent: string | null): boolean {
 export function verdictOf(request: Request): Verdict {
   const get = (name: string) => request.headers.get(name)
   if (provenByProxy(get)) return 'proxied'
-  if (Object.hasOwn(EXEMPT, new URL(request.url).pathname)) return 'exempt'
+  if (selfAuthenticating(new URL(request.url).pathname)) return 'exempt'
   if (READS.has(request.method) && readerTokenMatches(get(READER_TOKEN_HEADER))) return 'reader'
   return 'unproven'
 }
@@ -95,7 +111,7 @@ export function isOpen(request: Request): boolean {
   return (
     pathname === '/login' ||
     pathname.startsWith('/api/auth/') ||
-    Object.hasOwn(EXEMPT, pathname) ||
+    selfAuthenticating(pathname) ||
     (request.method === 'POST' && pathname.startsWith('/_serverFn/'))
   )
 }

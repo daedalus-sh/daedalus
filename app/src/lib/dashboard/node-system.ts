@@ -1,9 +1,11 @@
 import type { Ctx } from '../../core/ctx'
 import type { ProviderReport, StatusDocument, Telemetry } from '../../host/controller/generated'
 import { readNode } from '../../host/controller/nodes'
+import { isLightOs } from '../agent/light'
 import { getNode, type NodeRow } from '../repo/nodes'
 import { type BoardReleases, boardReleases } from './board-releases'
 import { type BrowserLatest, browserLatest } from './browser-releases'
+import { type AppleOsReleases, iosReleases } from './ios-releases'
 import { type MacReleases, macosReleases } from './macos-releases'
 
 // The System page for a machine that is not this box, the same tabs the
@@ -39,6 +41,8 @@ export type NodeSystemData = {
   browserLatest: BrowserLatest[] | null
   /** What Apple has shipped past the running macOS, read only for the macOS tab. */
   macos: MacReleases | null
+  /** What Apple has shipped past a phone's or tablet's OS, read only for its Software tab. */
+  ios: AppleOsReleases | null
   /** Processor busy, six hours at two-minute steps, from the box's Prometheus. */
   cpuSpark: number[]
   error: string | null
@@ -47,7 +51,7 @@ export type NodeSystemData = {
 export async function loadNodeSystem(
   ctx: Pick<Ctx, 'controller' | 'prom'>,
   id: string,
-  opts: { board?: boolean; browsers?: boolean; macos?: boolean } = {},
+  opts: { board?: boolean; browsers?: boolean; macos?: boolean; ios?: boolean } = {},
 ): Promise<NodeSystemData | null> {
   // One read: the machine, its status, its full telemetry and its providers.
   // The spark does not need the machine: it is what the box has scraped,
@@ -60,6 +64,13 @@ export async function loadNodeSystem(
   ])
   const node = await getNode(id, read)
   if (node === null) return null
+  const d = read.detail
+  // A phone is rarely connected: Apple's list is read from what it last said
+  // it runs, live or kept (the row's `device`).
+  const ios =
+    opts.ios === true && isLightOs(node.os)
+      ? await iosFor(node, d?.status?.os_version || null)
+      : null
   const none = {
     node,
     status: null,
@@ -68,9 +79,9 @@ export async function loadNodeSystem(
     releases: null,
     browserLatest: null,
     macos: null,
+    ios,
     cpuSpark,
   }
-  const d = read.detail
   if (d === null) return { ...none, error: read.error }
   if (d.status === null) {
     return {
@@ -116,4 +127,10 @@ export async function loadNodeSystem(
     macos,
     error: null,
   }
+}
+
+async function iosFor(node: NodeRow, live: string | null): Promise<AppleOsReleases | null> {
+  const version = live ?? node.device?.osVersion ?? null
+  if (version === null || version === '' || !isLightOs(node.os)) return null
+  return iosReleases(node.os, version, node.device?.model ?? null)
 }

@@ -13,6 +13,9 @@ export const OS_MARK: Record<string, { src: string; invert: boolean }> = {
   windows: { src: '/icon-windows.svg', invert: false },
   macos: { src: '/icon-apple.svg', invert: true },
   linux: { src: '/icon-linux.svg', invert: true },
+  // A phone or tablet (lib/agent/light.ts) is Apple's, as a Mac is.
+  ios: { src: '/icon-apple.svg', invert: true },
+  ipados: { src: '/icon-apple.svg', invert: true },
 }
 
 /* The compact strip: a caption that hugs the picker above it, and sits flush

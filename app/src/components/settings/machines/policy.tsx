@@ -66,15 +66,22 @@ export function Policy({
       </div>
       <Rows
         framed
-        rows={[
-          ...policyNames(ed, n, lanDomain),
-          ...policyProviders(ed, n, lanDomain),
-          ...policyAwake(ed),
-          ...policyAlert(ed),
-          ...policyClaude(ed, n),
-          ...policySantree(ed, n, os, agentVersion),
-          ...policyHardware(ed, n, shape),
-        ]}
+        rows={
+          // A phone or tablet takes one thing from the box: what the pages call
+          // it. It runs no Claude, no model server and no hold, has no name on
+          // the LAN, and is away too often for a link alert to mean anything.
+          n.light
+            ? policyNames(ed, n, lanDomain).slice(0, 1)
+            : [
+                ...policyNames(ed, n, lanDomain),
+                ...policyProviders(ed, n, lanDomain),
+                ...policyAwake(ed),
+                ...policyAlert(ed),
+                ...policyClaude(ed, n),
+                ...policySantree(ed, n, os, agentVersion),
+                ...policyHardware(ed, n, shape),
+              ]
+        }
       />
       <Band>
         {ed.error !== null && <p className={ERROR_NOTE}>{ed.error}</p>}

@@ -1,5 +1,6 @@
 import { Link } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
+import { lightKind } from '../lib/agent/light'
 import { cn } from '../lib/cn'
 import type { NodeRow } from '../lib/repo/nodes'
 import { type Tone, toneStyle } from '../lib/tone'
@@ -177,8 +178,11 @@ export function MachinePicker({
         link: link(n.id),
         count: counts?.[n.id] !== undefined ? counts[n.id] : (n.claude?.sessions ?? null),
         dot: dots?.[n.id] ?? null,
-        title:
-          n.claude !== null && n.claude.sessions > 0
+        // A phone or tablet is away most of the day, and that is its norm: it
+        // never wears a dot for it, whatever a caller passes for a computer.
+        title: n.light
+          ? lightKind(n.os)
+          : n.claude !== null && n.claude.sessions > 0
             ? `${String(n.claude.sessions)} Claude sessions`
             : undefined,
       }),

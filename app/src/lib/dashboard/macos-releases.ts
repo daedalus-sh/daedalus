@@ -63,8 +63,8 @@ export type MacReleases = {
 
 const TTL_MS = 6 * 3600_000
 const READ_MS = 12_000
-const TABLE_URL = 'https://support.apple.com/en-us/100100'
-const PMV_URL = 'https://gdmf.apple.com/v2/pmv'
+export const TABLE_URL = 'https://support.apple.com/en-us/100100'
+export const PMV_URL = 'https://gdmf.apple.com/v2/pmv'
 const UA =
   'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36'
 
@@ -144,7 +144,7 @@ export function tableDate(s: string): string | null {
   return mon === undefined ? null : `${m[3] ?? ''}-${mon}-${(m[1] ?? '').padStart(2, '0')}`
 }
 
-function stripTags(html: string): string {
+export function stripTags(html: string): string {
   return html
     .replace(/<[^>]+>/g, ' ')
     .replace(/&nbsp;/g, ' ')
@@ -186,7 +186,10 @@ export function parseSecurityTable(html: string): TableRow[] {
   return out
 }
 
-async function fetchText(url: string, headers: Record<string, string> = {}): Promise<string> {
+export async function fetchText(
+  url: string,
+  headers: Record<string, string> = {},
+): Promise<string> {
   const res = await fetch(url, {
     signal: AbortSignal.timeout(READ_MS),
     redirect: 'follow',
@@ -206,10 +209,10 @@ async function securityTable(): Promise<TableRow[]> {
 
 /* ── the version feed ─────────────────────────────────────────────────── */
 
-type PmvBuild = { build: string; posted: string | null; devices: string[] }
+export type PmvBuild = { build: string; posted: string | null; devices: string[] }
 
 /** One GET over a chain that ends at Apple's own root. */
-function getPinned(url: string): Promise<string> {
+export function getPinned(url: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const req = request(
       url,
@@ -232,20 +235,23 @@ function getPinned(url: string): Promise<string> {
   })
 }
 
-/** Version → its builds, from the feed. */
-export function parsePmv(text: string): Map<string, PmvBuild[]> {
+/** Version → its builds, from one of the feed's sets. */
+export function parsePmv(text: string, set: 'macOS' | 'iOS' = 'macOS'): Map<string, PmvBuild[]> {
   const body = JSON.parse(text) as {
-    PublicAssetSets?: {
-      macOS?: {
-        ProductVersion?: string
-        Build?: string
-        PostingDate?: string
-        SupportedDevices?: string[]
-      }[]
-    }
+    PublicAssetSets?: Partial<
+      Record<
+        string,
+        {
+          ProductVersion?: string
+          Build?: string
+          PostingDate?: string
+          SupportedDevices?: string[]
+        }[]
+      >
+    >
   }
   const out = new Map<string, PmvBuild[]>()
-  for (const a of body.PublicAssetSets?.macOS ?? []) {
+  for (const a of body.PublicAssetSets?.[set] ?? []) {
     if (typeof a.ProductVersion !== 'string' || typeof a.Build !== 'string') continue
     const list = out.get(a.ProductVersion) ?? []
     if (!list.some((b) => b.build === a.Build)) {
@@ -364,12 +370,12 @@ export function parseReleaseNotes(text: string): MacNoteSection[] {
 }
 
 /** "26.6.2" → ["macos-26_6-release-notes", "macos-26-release-notes"]. */
-export function notesSlugs(version: string): string[] {
+export function notesSlugs(version: string, product = 'macos'): string[] {
   const [major = version, minor] = version.split('.')
   const out: string[] = []
-  if (minor !== undefined && minor !== '0') out.push(`macos-${major}_${minor}-release-notes`)
-  if (minor !== undefined && minor === '0') out.push(`macos-${major}_0-release-notes`)
-  out.push(`macos-${major}-release-notes`)
+  if (minor !== undefined && minor !== '0') out.push(`${product}-${major}_${minor}-release-notes`)
+  if (minor !== undefined && minor === '0') out.push(`${product}-${major}_0-release-notes`)
+  out.push(`${product}-${major}-release-notes`)
   return out
 }
 

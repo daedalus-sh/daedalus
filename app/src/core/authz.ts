@@ -15,10 +15,10 @@ import { sessionOf } from './session'
 // matters the day either of those is widened.
 //
 // MACHINE CALLERS DO NOT USE THE GATE ABOVE. /api/github/webhook (an HMAC
-// signature) and /mcp (a scoped token) authenticate something that has no
-// person behind it and no session to carry groups. They keep their own auth;
-// /mcp, whose tools drive the same write flows as the buttons, reaches its own
-// narrow door at the bottom of this file (assertMachineActor).
+// signature), /mcp (a scoped token) and /api/v1 (a node's token) authenticate
+// something that has no session to carry groups. They keep their own auth;
+// /mcp and /api/v1, which drive the same write flows as the buttons, reach
+// their own narrow door at the bottom of this file (assertMachineActor).
 
 /** What an authorization decision knows. */
 export type Authorization = {
@@ -133,14 +133,40 @@ export async function assertAdmin(): Promise<string> {
  * What a verified machine caller hands in. A nominal-ish shape rather than a
  * bare string, so `assertMachineActor(someUserInput)` does not typecheck.
  */
-export type MachineProof = {
-  /** Which machine door this came through. One value today; more would each need their own review. */
-  door: 'mcp-token'
-  /** The token's label. This is what the write is recorded under. */
-  label: string
-  /** The token's scope. Only `write` may authorise a mutation. */
-  scope: 'read' | 'write'
-}
+export type MachineProof =
+  | {
+      /** Which machine door this came through. Each has its own review, below. */
+      door: 'mcp-token'
+      /** The token's label. This is what the write is recorded under. */
+      label: string
+      /** The token's scope. Only `write` may authorise a mutation. */
+      scope: 'read' | 'write'
+    }
+  | {
+      door: 'node-token'
+      /** The node the token belongs to, as host/node-tokens.ts identified it. */
+      node: { id: string; name: string }
+      /** The node row's state when the token was checked. Only `approved` may write. */
+      state: string
+    }
+
+// THE SECOND DOOR: a node's API token (`/api/v1`, the native app).
+//
+// What authorises it is the same kind of thing: a 256-bit bearer value matched
+// against a stored digest before any work (host/node-tokens.ts). What differs
+// is where it comes from and what bounds it. Nobody mints one by hand: it is
+// born in a pairing, which an admin starts on Settings › Machines and which
+// approves the node under that admin's name — so every such token traces to
+// one admin's decision about one device, shown on that page, and ends with it
+// (revoke, forget and the device's own leave delete it). There is no read
+// scope to check: the app's reads and writes are one grant, the operator's own
+// phone standing in for the operator. So the thing this function refuses is a
+// token whose node is not `approved` — checked by the caller on every request,
+// and again here, because this is the line a write crosses.
+//
+// The writes it reaches are the routes of host/api/v1/ and no others: each
+// calls the flow a button calls, with its guards and ceremonies, and the
+// actor below goes on the record.
 
 /**
  * The actor a token-authenticated mutation may proceed with, or a throw.
@@ -151,6 +177,15 @@ export type MachineProof = {
  * header to read.
  */
 export function assertMachineActor(proof: MachineProof): string {
+  if (proof.door === 'node-token') {
+    if (proof.state !== 'approved')
+      throw new Error('this device is not approved, so nothing was done')
+    const name = proof.node.name.trim()
+    if (name === '' || proof.node.id === '') {
+      throw new Error('the token named no device to record the write under')
+    }
+    return `node:${name}`
+  }
   if (proof.door !== 'mcp-token') throw new Error('unknown machine door')
   if (proof.scope !== 'write') {
     throw new Error('this token is read-only, so nothing was done')

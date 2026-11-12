@@ -4,6 +4,7 @@ import type { NodeSummary, RotationInfo, StatusDocument } from '../../host/contr
 import { type DesiredSync, lastDesiredSync } from '../../host/controller/nodes'
 import { lanDomain } from '../../host/providers/fleet'
 import { readSessionHost, type SessionHostLine } from '../../host/session-host'
+import { wgEasy } from '../../host/wg-easy'
 import { listNodes, type NodeRow } from '../repo/nodes'
 
 // The other machines, as Settings › Machines lists them — here rather than
@@ -62,6 +63,8 @@ export type MachinesData = {
   machines: Machine[]
   /** Why the controller's list of machines could not be read, when it could not. */
   listError: string | null
+  /** The box can make a tunnel for a phone or tablet (it binds a wg-easy). */
+  canPair: boolean
 }
 
 /** The order the page reads in: what needs a decision, then what is trusted, then the rest. */
@@ -141,5 +144,6 @@ export async function loadMachines(ctx: Ctx): Promise<MachinesData> {
     sessionHost,
     machines,
     listError: seen.error,
+    canPair: wgEasy() !== null && (ctx.env('WG_EASY_HOST_ALIAS') ?? '') !== '',
   }
 }

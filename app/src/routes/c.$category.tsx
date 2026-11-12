@@ -7,6 +7,7 @@ import { PageHead } from '../components/page'
 import { BoardsSkeleton, ServiceHeadSkeleton, StripSkeleton } from '../components/skeleton'
 import { TabBar } from '../components/tabs'
 import { EMPTY } from '../components/tokens'
+import { isLightOs } from '../lib/agent/light'
 import { known } from '../lib/known'
 import { isDotted, resolveTabOf } from '../lib/modules/manifest'
 import { moduleById } from '../lib/modules/registry'
@@ -126,6 +127,9 @@ export const Route = createFileRoute('/c/$category')({
                 board: nodeTab === 'board',
                 browsers: nodeTab === 'browsers',
                 macos: nodeTab === 'macos',
+                // A phone's list is read from what it last said it runs, so
+                // it is asked for whether or not the phone is connected.
+                ios: isLightOs(nodeOs) && nodeTab === 'ios',
               },
             }),
       nodeClaude:

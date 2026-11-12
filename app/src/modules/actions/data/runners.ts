@@ -133,7 +133,8 @@ export async function loadRunners(ctx: Ctx): Promise<RunnersData> {
       minutes: demand.linux.minutes,
     },
     ...nodes
-      .filter((n) => n.state === 'approved')
+      // A phone builds nothing.
+      .filter((n) => n.state === 'approved' && !n.light)
       .map((n) => {
         const os = osOf(n.os)
         return {

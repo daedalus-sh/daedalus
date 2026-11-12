@@ -1,10 +1,12 @@
 import type { LinkStatus, TunnelStatus } from '../../../host/controller/generated'
+import { isLightOs } from '../../../lib/agent/light'
 import { cn } from '../../../lib/cn'
 import type { Machine } from '../../../lib/dashboard/machines'
 import { bytes, since } from '../../../lib/format'
 import type { Tone } from '../../../lib/tone'
 import { Chip } from '../../viz'
 import { ASIDE, ERROR_NOTE, Line, Mono } from '../shared'
+import { LightLink } from './light'
 
 // The cells a machine's row and its open panel are drawn from: the OS mark,
 // the one-word verdict, the updater's badges, Claude's line and the tunnel's.
@@ -20,7 +22,7 @@ export function OsMark({ os }: { os: string }) {
   const mark =
     os === 'windows'
       ? { src: '/icon-windows.svg', invert: false }
-      : os === 'macos'
+      : os === 'macos' || isLightOs(os)
         ? { src: '/icon-apple.svg', invert: true }
         : os === 'linux'
           ? { src: '/icon-linux.svg', invert: true }
@@ -42,6 +44,8 @@ export function osName(os: string | null | undefined): string {
   if (os === 'macos') return 'macOS'
   if (os === 'windows') return 'Windows'
   if (os === 'linux') return 'Linux'
+  if (os === 'ios') return 'iOS'
+  if (os === 'ipados') return 'iPadOS'
   return os ? os.charAt(0).toUpperCase() + os.slice(1) : 'unknown OS'
 }
 
@@ -94,6 +98,11 @@ export function verdict(m: Machine): Verdict {
  * needs a look wears a chip.
  */
 export function StatusCell({ m }: { m: Machine }) {
+  // A phone is away most of the day: when it was last seen, said quietly, and
+  // none of a computer's verdicts (it holds nothing awake and updates itself).
+  if (m.node?.light === true && m.node.state !== 'revoked') {
+    return <LightLink n={m.node} className="text-[0.78rem] text-muted-foreground" />
+  }
   const v = verdict(m)
   // Not connected is the one quiet verdict that still wants a look: a dot, not a chip.
   const away = m.node !== null && m.node.state !== 'revoked' && m.node.connected === false

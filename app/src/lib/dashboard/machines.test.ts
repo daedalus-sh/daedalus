@@ -17,6 +17,7 @@ const seen = (id: string, state: NodeState, hostname: string | null = null): Nod
   lan_ip: null,
   mac: null,
   claude: null,
+  kind: 'agent',
   form: null,
   model: null,
   status: null,

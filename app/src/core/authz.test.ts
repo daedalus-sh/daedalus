@@ -86,6 +86,27 @@ describe('the machine door', () => {
     )
   })
 
+  it('names a paired device’s writes by the device, through its own door', () => {
+    expect(
+      assertMachineActor({
+        door: 'node-token',
+        node: { id: '0123456789abcdef', name: 'Santi’s iPhone' },
+        state: 'approved',
+      }),
+    ).toBe('node:Santi’s iPhone')
+  })
+
+  it('refuses a device that is not approved, or that names nothing', () => {
+    for (const state of ['revoked', 'pending', '']) {
+      expect(() =>
+        assertMachineActor({ door: 'node-token', node: { id: 'a', name: 'x' }, state }),
+      ).toThrow(/not approved/)
+    }
+    expect(() =>
+      assertMachineActor({ door: 'node-token', node: { id: 'a', name: ' ' }, state: 'approved' }),
+    ).toThrow(/no device/)
+  })
+
   it('refuses a door it does not know', () => {
     // The `door` field is not decoration: a future machine caller gets its own
     // value here and its own review, rather than inheriting this one's licence.

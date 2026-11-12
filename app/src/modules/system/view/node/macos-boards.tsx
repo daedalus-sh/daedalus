@@ -166,7 +166,13 @@ export function Panel({ f }: { f: NodeMacosFacts }) {
       ) : (
         <ul className={LIST}>
           {[...(m.next === null ? [] : [m.next]), ...m.line].map((r) => (
-            <ReleaseRow key={r.version} r={r} major={r === m.next} />
+            <ReleaseRow
+              key={r.version}
+              r={r}
+              label={`macOS ${r.name}`}
+              major={r === m.next}
+              bare={r.securityNote}
+            />
           ))}
         </ul>
       )}
@@ -274,7 +280,28 @@ export function InstalledLatelyBoard({ f }: { f: NodeMacosFacts }) {
 const SHOW_SECTIONS = 6
 const SHOW_ITEMS = 2
 
-function ReleaseRow({ r, major }: { r: MacRelease; major: boolean }) {
+/** What a release row reads, whichever of Apple's systems the release is for. */
+type AppleRelease = Pick<
+  MacRelease,
+  'version' | 'build' | 'date' | 'cves' | 'notes' | 'notesUrl' | 'securityUrl'
+>
+
+/**
+ * One release Apple has shipped past the running one: a Mac's here, a phone's
+ * or tablet's on its own tab (./ios.tsx). `label` names the system ("macOS
+ * Tahoe", "iOS"); `bare` is what to say where Apple published no notes.
+ */
+export function ReleaseRow({
+  r,
+  label,
+  major,
+  bare,
+}: {
+  r: AppleRelease
+  label: string
+  major: boolean
+  bare: string | null
+}) {
   const sections = r.notes.slice(0, SHOW_SECTIONS)
   const more = r.notes.length - sections.length
   return (
@@ -282,7 +309,7 @@ function ReleaseRow({ r, major }: { r: MacRelease; major: boolean }) {
       <span className={`${ROW_MAIN} flex min-w-0 flex-col gap-1 whitespace-normal`}>
         <span className="flex flex-wrap items-center gap-2">
           <span>
-            macOS {r.name} <span className={MONO}>{r.version}</span>
+            {label} <span className={MONO}>{r.version}</span>
           </span>
           {major && <Chip tone="info">next major</Chip>}
           {!major && <Chip tone="warn">newer</Chip>}
@@ -297,7 +324,7 @@ function ReleaseRow({ r, major }: { r: MacRelease; major: boolean }) {
         </span>
         {sections.length === 0 ? (
           <span className={NOTE}>
-            {r.securityNote ?? 'Apple published no developer notes for this version'}
+            {bare ?? 'Apple published no developer notes for this version'}
           </span>
         ) : (
           <span className="flex flex-col gap-0.5 text-[0.78rem] text-muted-foreground leading-[1.5]">
