@@ -6,7 +6,7 @@
 #   app     on a Mac: the core built for iOS into an XCFramework, the app
 #           built for a simulator, and the package's tests.
 #
-#   testflight  after both, for a push to main only, and only once the
+#   testflight  after both, for main only (a push, or Run workflow), once the
 #           repository variable IOS_DEPLOY_ENABLED is "true": archive and
 #           upload to TestFlight (ios/README.md, "Releasing"). Signing is
 #           cloud-managed: the App Store Connect API key (Admin role) lets
@@ -132,7 +132,7 @@ jobs:
   testflight:
     name: TestFlight (archive, upload)
     needs: [core, app]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.IOS_DEPLOY_ENABLED == 'true'
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' && vars.IOS_DEPLOY_ENABLED == 'true'
     runs-on: xcode-27
     timeout-minutes: 60
     # The App Store Connect key lives in this environment, restricted to
