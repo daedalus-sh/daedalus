@@ -88,7 +88,7 @@ struct DeviceFacts {
             memoryBytes: ProcessInfo.processInfo.physicalMemory,
             storageTotalBytes: volume?.volumeTotalCapacity.map { Int64($0) },
             storageFreeBytes: volume?.volumeAvailableCapacityForImportantUsage,
-            batteryPercent: level < 0 ? nil : Double(level) * 100,
+            batteryPercent: level < 0 ? nil : (Double(level) * 100).rounded(),
             charging: charging(device.batteryState),
             lowPower: ProcessInfo.processInfo.isLowPowerModeEnabled)
     }

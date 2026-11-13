@@ -90,7 +90,7 @@ enum WatchReading {
             model: sysctl("hw.machine") ?? device.model,
             osVersion: device.systemVersion,
             osBuild: sysctl("kern.osversion"),
-            batteryPercent: level < 0 ? nil : Double(level) * 100,
+            batteryPercent: level < 0 ? nil : (Double(level) * 100).rounded(),
             charging: charging(device.batteryState),
             lowPower: ProcessInfo.processInfo.isLowPowerModeEnabled,
             storageTotalBytes: (volume?[.systemSize] as? NSNumber)?.int64Value,
