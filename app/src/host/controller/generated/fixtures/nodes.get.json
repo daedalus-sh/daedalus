@@ -164,6 +164,27 @@
     "temperatures": [],
     "network": [],
     "battery": null,
+    "accessories": [
+      {
+        "kind": "watch",
+        "name": "Apple Watch",
+        "model": "Watch7,5",
+        "os_name": "watchOS",
+        "os_version": "26.1",
+        "os_build": "23S37",
+        "battery": {
+          "percent": 64.0,
+          "charging": false,
+          "health_pct": null,
+          "cycles": null,
+          "condition": null,
+          "low_power": false
+        },
+        "storage_total_bytes": 64000000000,
+        "storage_free_bytes": 41000000000,
+        "sampled_at": "2026-09-27T10:00:05Z"
+      }
+    ],
     "processes": [],
     "process_count": null,
     "services": [],

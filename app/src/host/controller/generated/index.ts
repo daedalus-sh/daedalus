@@ -1,6 +1,8 @@
 // Generated from agent/src (src/ts.rs). Do not edit: change the Rust type,
 // then run agent/gate.sh gen.
 
+export type { Accessory } from './Accessory'
+export type { AccessoryKind } from './AccessoryKind'
 export type { ActionOutcome } from './ActionOutcome'
 export type { ActionQueryParams } from './ActionQueryParams'
 export type { ActionResult } from './ActionResult'

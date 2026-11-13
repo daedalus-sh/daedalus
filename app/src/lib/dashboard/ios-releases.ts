@@ -17,8 +17,8 @@ import {
   tableDate,
 } from './macos-releases'
 
-// What Apple has shipped since the iOS or iPadOS a device is running, from
-// the same three Apple pages macos-releases.ts reads:
+// What Apple has shipped since the iOS, iPadOS or watchOS a device is
+// running, from the same three Apple pages macos-releases.ts reads:
 //
 // - support.apple.com/100100: a row is titled "iOS 26.1 and iPadOS 26.1",
 //   or names one of the two alone when the other did not get the release
@@ -31,6 +31,11 @@ import {
 // - developer.apple.com's release notes, one set for both systems
 //   (ios-ipados-release-notes). Not every minor has a page; a version
 //   without one gets its major's.
+//
+// A watch (a phone's accessory, lib/agent/light.ts) is read the same way:
+// its rows of the table are titled "watchOS 27.2.1" alone, its builds are
+// the feed's `iOS` set too (the ones listing a `Watch…` model), and its
+// notes are their own set (watchos-release-notes).
 
 export type AppleOsRelease = {
   /** As Apple prints it: "26.1", "26.0.1". */
@@ -49,8 +54,18 @@ export type AppleOsRelease = {
   notes: MacNoteSection[]
 }
 
+/** The systems this reader knows: a phone's, a tablet's, a watch's. */
+export type AppleOs = 'ios' | 'ipados' | 'watchos'
+
+/** As Apple writes each. */
+export const APPLE_OS_NAME: Record<AppleOs, string> = {
+  ios: 'iOS',
+  ipados: 'iPadOS',
+  watchos: 'watchOS',
+}
+
 export type AppleOsReleases = {
-  os: 'ios' | 'ipados'
+  os: AppleOs
   /** The running version and build, as the device reported them. */
   current: { version: string; build: string | null }
   /** The newest version Apple has published for this OS, whatever is running; null when the table did not answer. */
@@ -74,17 +89,22 @@ export type IosTableRow = {
 
 const TTL_MS = 6 * 3600_000
 const LISTED = 8
-const NOTES_PRODUCT = 'ios-ipados'
-const NOTES_PATH = 'ios-ipados-release-notes'
+// One set of notes for iOS and iPadOS, another for watchOS.
+const NOTES: Record<AppleOs, { product: string; path: string }> = {
+  ios: { product: 'ios-ipados', path: 'ios-ipados-release-notes' },
+  ipados: { product: 'ios-ipados', path: 'ios-ipados-release-notes' },
+  watchos: { product: 'watchos', path: 'watchos-release-notes' },
+}
 
 const TABLE = swrCache({ ttlMs: TTL_MS })
 const PMV = swrCache({ ttlMs: TTL_MS })
-const NOTES = swrCache({ ttlMs: TTL_MS })
+const NOTES_CACHE = swrCache({ ttlMs: TTL_MS })
 const SECURITY = swrCache({ ttlMs: TTL_MS })
 
-const TITLE: Record<AppleOsReleases['os'], RegExp> = {
+const TITLE: Record<AppleOs, RegExp> = {
   ios: /\biOS (\d+(?:\.\d+)*)/,
   ipados: /\biPadOS (\d+(?:\.\d+)*)/,
+  watchos: /\bwatchOS (\d+(?:\.\d+)*)/,
 }
 
 /**
@@ -95,7 +115,7 @@ const TITLE: Record<AppleOsReleases['os'], RegExp> = {
  * iOS, iPadOS, and macOS" names the systems without a version and is not a
  * release.
  */
-export function parseIosTable(html: string, os: AppleOsReleases['os']): IosTableRow[] {
+export function parseIosTable(html: string, os: AppleOs): IosTableRow[] {
   const out: IosTableRow[] = []
   const rows = html.replace(/\n/g, ' ').match(/<tr[\s>][\s\S]*?<\/tr>/g) ?? []
   for (const row of rows) {
@@ -106,7 +126,7 @@ export function parseIosTable(html: string, os: AppleOsReleases['os']): IosTable
     const link = head.match(/<a[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/)
     const named = link ?? head.match(/<p[^>]*>([\s\S]*?)<\/p>/)
     const title = stripTags(named?.[named.length - 1] ?? head)
-    if (!/^(?:iOS|iPadOS) \d/.test(title)) continue
+    if (!/^(?:iOS|iPadOS|watchOS) \d/.test(title)) continue
     const version = title.match(TITLE[os])?.[1]
     if (version === undefined || out.some((r) => r.version === version)) continue
     const rest = stripTags(head.replace(named?.[0] ?? '', ''))
@@ -120,27 +140,35 @@ export function parseIosTable(html: string, os: AppleOsReleases['os']): IosTable
   return out
 }
 
+const FAMILY: Record<AppleOs, RegExp> = {
+  ios: /^(?:iPhone|iPod)/,
+  ipados: /^iPad/,
+  watchos: /^Watch/,
+}
+
 /**
  * The build a version means for this device: among the builds that list
  * its model — or, the model unknown or not listed, any device of its
  * family — the lowest-numbered, as `buildFor` picks for a Mac. Null when
- * the version's only builds are for watches, TVs or speakers.
+ * the version's only builds are for another family: the feed's one set
+ * holds phones, tablets, watches, TVs and speakers, and they reuse each
+ * other's version numbers.
  */
 export function iosBuildFor(
   builds: PmvBuild[] | undefined,
-  os: AppleOsReleases['os'],
+  os: AppleOs,
   model: string | null,
 ): string | null {
   if (builds === undefined) return null
-  const family = os === 'ios' ? /^(?:iPhone|iPod)/ : /^iPad/
+  const family = FAMILY[os]
   const mine = model === null ? [] : builds.filter((b) => b.devices.includes(model))
   const pool = mine.length > 0 ? mine : builds.filter((b) => b.devices.some((d) => family.test(d)))
   return buildFor(pool, null)
 }
 
-/** "26.7.3" → ["ios-ipados-26_7-release-notes", "ios-ipados-26-release-notes"]. */
-export function iosNotesSlugs(version: string): string[] {
-  return notesSlugs(version, NOTES_PRODUCT)
+/** "26.7.3" → ["ios-ipados-26_7-release-notes", "ios-ipados-26-release-notes"]; a watch's under `watchos-`. */
+export function iosNotesSlugs(version: string, os: AppleOs = 'ios'): string[] {
+  return notesSlugs(version, NOTES[os].product)
 }
 
 async function securityTable(): Promise<string> {
@@ -153,16 +181,18 @@ async function versionFeed(): Promise<Map<string, PmvBuild[]>> {
 
 async function releaseNotes(
   version: string,
+  os: AppleOs,
 ): Promise<{ url: string | null; sections: MacNoteSection[] }> {
-  const slugs = iosNotesSlugs(version)
-  const notes = await NOTES.get(slugs[0] ?? version, async () => {
+  const slugs = iosNotesSlugs(version, os)
+  const { path } = NOTES[os]
+  const notes = await NOTES_CACHE.get(slugs[0] ?? `${os} ${version}`, async () => {
     for (const slug of slugs) {
       try {
         const text = await fetchText(
-          `https://developer.apple.com/tutorials/data/documentation/${NOTES_PATH}/${slug}.json`,
+          `https://developer.apple.com/tutorials/data/documentation/${path}/${slug}.json`,
         )
         return {
-          url: `https://developer.apple.com/documentation/${NOTES_PATH}/${slug}`,
+          url: `https://developer.apple.com/documentation/${path}/${slug}`,
           sections: parseReleaseNotes(text),
         }
       } catch {
@@ -186,12 +216,12 @@ export function releaseSummary(cves: number | null, note: string | null): string
 
 /**
  * `osVersion` is what the device reports: "26.1", or "26.1 (23B85)".
- * `model` is the device identifier ("iPhone17,1", "iPad14,3") or null; it
+ * `model` is the device identifier ("iPhone17,1", "iPad14,3", "Watch7,5") or null; it
  * picks the build in Apple's version feed the way `buildFor` does with a
  * Mac's board target.
  */
 export async function iosReleases(
-  os: 'ios' | 'ipados',
+  os: AppleOs,
   osVersion: string,
   model: string | null,
 ): Promise<AppleOsReleases> {
@@ -209,7 +239,7 @@ export async function iosReleases(
   try {
     rows = parseIosTable(await securityTable(), os)
     if (rows.length === 0) {
-      throw new Error(`the security table had no ${os === 'ios' ? 'iOS' : 'iPadOS'} rows`)
+      throw new Error(`the security table had no ${APPLE_OS_NAME[os]} rows`)
     }
   } catch (e) {
     const why = e instanceof Error ? e.message : String(e)
@@ -224,7 +254,7 @@ export async function iosReleases(
     const feedVersion = r.version.includes('.') ? r.version : `${r.version}.0`
     const none = { cves: null, note: null }
     const [notes, sec] = await Promise.all([
-      releaseNotes(feedVersion).catch(() => ({ url: null, sections: [] })),
+      releaseNotes(feedVersion, os).catch(() => ({ url: null, sections: [] })),
       r.url === null ? Promise.resolve(none) : securityContent(r.url).catch(() => none),
     ])
     return {

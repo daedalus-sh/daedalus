@@ -1,5 +1,8 @@
 import type { Ctx } from '../../../core/ctx'
+import type { DeviceAccessory } from '../../../lib/agent/light'
 import type {
+  AccessoryItem,
+  AppleOsReleases as ApiAppleOsReleases,
   Apps,
   Claude,
   ClaudeMachine,
@@ -16,6 +19,7 @@ import type {
   Updates,
   UpdatesStatus,
 } from '../../../lib/api-v1'
+import type { AppleOsReleases } from '../../../lib/dashboard/ios-releases'
 import type { NodeRow } from '../../../lib/repo/nodes'
 import type { Report, Roster, StatusDocument, Summary, Telemetry } from '../../controller/generated'
 
@@ -197,7 +201,19 @@ const claudeSummary = (s: Summary | null): ClaudeSummary | null =>
         signedIn: s.signed_in,
       }
 
-function nodeItem(n: NodeRow, status: StatusDocument | null, self: string): MachineItem {
+const accessoryItem = (a: DeviceAccessory): AccessoryItem => ({
+  kind: a.kind,
+  name: a.name,
+  battery: a.battery,
+})
+
+function nodeItem(
+  n: NodeRow,
+  status: StatusDocument | null,
+  self: string,
+  // The list a detail read already resolved (live over kept); the row's otherwise.
+  accessories: readonly DeviceAccessory[] = n.device?.accessories ?? [],
+): MachineItem {
   return {
     id: n.id,
     kind: 'node',
@@ -216,6 +232,7 @@ function nodeItem(n: NodeRow, status: StatusDocument | null, self: string): Mach
     restartPending: status?.restart_pending ?? false,
     claude: n.light ? null : claudeSummary(n.claude),
     battery: n.device?.battery ?? null,
+    accessories: n.light ? accessories.map(accessoryItem) : [],
   }
 }
 
@@ -257,6 +274,7 @@ async function boxItem(ctx: Ctx): Promise<MachineItem> {
             signedIn: r.credentials.present,
           },
     battery: null,
+    accessories: [],
   }
 }
 
@@ -308,6 +326,12 @@ const systemOf = (s: StatusDocument, t: Telemetry): MachineSystem => ({
   osRebootPending: t.updates?.reboot_pending ?? null,
 })
 
+/** Apple's list as a phone screen shows it: each release's facts and links, not the notes' text. */
+const withoutNotes = (r: AppleOsReleases): ApiAppleOsReleases => ({
+  ...r,
+  releases: r.releases.map(({ notes: _notes, ...rest }) => rest),
+})
+
 /** One machine's page: the box's vitals for `box`, a node's last report otherwise. Null: no such machine. */
 export async function machineDetail(
   ctx: Ctx,
@@ -324,20 +348,26 @@ export async function machineDetail(
     return { machine, kind: 'box', host, memory, storage }
   }
   const { loadNodeSystem } = await import('../../../lib/dashboard/node-system')
-  const d = await loadNodeSystem(ctx, id, { ios: true })
+  const d = await loadNodeSystem(ctx, id, { ios: true, watch: true })
   if (d === null) return null
   const n = d.node
   const system = d.status !== null && d.telemetry !== null ? systemOf(d.status, d.telemetry) : null
   return {
-    machine: nodeItem(n, d.status, self),
+    machine: nodeItem(n, d.status, self, d.accessories),
     kind: 'node',
     system,
     cpuSpark: d.cpuSpark,
-    device: n.light ? n.device : null,
-    osReleases:
-      d.ios === null
-        ? null
-        : { ...d.ios, releases: d.ios.releases.map(({ notes: _notes, ...rest }) => rest) },
+    device:
+      n.light && n.device !== null
+        ? {
+            ...n.device,
+            accessories: d.accessories.map(({ releases, ...a }) => ({
+              ...a,
+              osReleases: releases === null ? null : withoutNotes(releases),
+            })),
+          }
+        : null,
+    osReleases: d.ios === null ? null : withoutNotes(d.ios),
     note: system !== null ? null : (d.error ?? 'no telemetry has arrived yet'),
   }
 }

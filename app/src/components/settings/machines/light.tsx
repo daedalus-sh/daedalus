@@ -88,6 +88,19 @@ export function lightFacts(n: NodeRow, osLabel: string): Fact[] {
           <span className="tabular-nums">{bytes(d.memoryBytes)}</span>
         ),
     },
+    // Its watch, when it reported one: no machine of its own, a line of the phone's.
+    ...(d?.accessories ?? []).map((a, i) => ({
+      k: i === 0 ? 'Watch' : `Watch ${String(i + 1)}`,
+      v: (
+        <span className="tabular-nums">
+          {a.name ?? a.model ?? 'Apple Watch'}
+          <span className={ASIDE}>
+            {a.osVersion !== null && ` · watchOS ${a.osVersion}`}
+            {a.battery !== null && a.battery.percent !== null && ` · ${pct(a.battery.percent)}`}
+          </span>
+        </span>
+      ),
+    })),
     { k: 'Link', v: <LightLink n={n} /> },
     {
       k: 'Facts read',

@@ -444,6 +444,7 @@ export async function redeemPair(deps: PairDeps, body: unknown): Promise<PairAns
         battery: null,
         storage: null,
         memoryBytes: null,
+        accessories: [],
         at: new Date(now()).toISOString(),
       },
     })

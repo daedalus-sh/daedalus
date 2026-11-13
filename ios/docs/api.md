@@ -120,7 +120,8 @@ type PairRequest = {
   public_key: string
   /** The device's name ("Santi’s iPhone"): 1 to 253 characters, no control characters. */
   hostname: string
-  os: 'ios' | 'ipados'
+  /** `watchos` only on a watch's list (`AccessoryView.osReleases`). */
+  os: 'ios' | 'ipados' | 'watchos'
   /** `[a-z0-9_]{1,16}`: "arm64". */
   arch: string
   /** The app's version: `[0-9A-Za-z][0-9A-Za-z.+-]{0,31}`. */
@@ -732,6 +733,16 @@ type MachineItem = {
   claude: ClaudeSummary | null
   /** A phone's last reported battery; null otherwise. */
   battery: { percent: number | null; charging: boolean | null } | null
+  /** A phone's paired watch, as the phone last reported it; empty for every other machine and for a phone without one. */
+  accessories: AccessoryItem[]
+}
+
+/** What is paired with a phone and is no machine itself. It has no id, no link and no page of its own. */
+type AccessoryItem = {
+  kind: 'watch'
+  /** What its owner called it ("Santiago’s Apple Watch"); null when the phone did not say. */
+  name: string | null
+  battery: { percent: number | null; charging: boolean | null } | null
 }
 
 type ClaudeSummary = {
@@ -819,12 +830,30 @@ type DeviceView = {
   battery: { percent: number | null; charging: boolean | null } | null
   storage: { totalBytes: number | null; freeBytes: number | null } | null
   memoryBytes: number | null
+  /** Its paired watch, as its last sample listed it; empty when it has none. */
+  accessories: AccessoryView[]
   /** When the box read it. */
   at: string
 }
 
+/** A phone's watch: what the phone last said about it, and what Apple has published past its watchOS. */
+type AccessoryView = AccessoryItem & {
+  /** The device identifier: "Watch7,5". */
+  model: string | null
+  /** "26.1" */
+  osVersion: string | null
+  /** "23S37" */
+  osBuild: string | null
+  storage: { totalBytes: number | null; freeBytes: number | null } | null
+  /** When the watch read these facts. They reach the box only through its phone, so this can be old. */
+  at: string
+  /** The same shape as the phone's, with `os: 'watchos'`. Null when the watch has not said which watchOS it runs. */
+  osReleases: AppleOsReleases | null
+}
+
 type AppleOsReleases = {
-  os: 'ios' | 'ipados'
+  /** `watchos` only on a watch's list (`AccessoryView.osReleases`). */
+  os: 'ios' | 'ipados' | 'watchos'
   current: { version: string; build: string | null }
   /** The newest version Apple has published; null when Apple's table did not answer. */
   latest: string | null
@@ -854,6 +883,14 @@ type AppleOsReleases = {
 `device` is what the web UI shows for this phone, and it lags: the box reads
 it from the node's telemetry once a minute while the app is connected. The
 app knows its own device better than this answer does.
+
+A watch is not a machine: it never appears in `machines` and has no
+`/machines/:id`. The iPhone app receives its facts from the watchOS app and
+reports them in its own telemetry sample (`accessories`, in
+`ios/core/include/daedalus_ios.h`); the box keeps them with the phone's and
+answers them here. Every sample replaces the list whole: a sample without
+the watch is a phone without one. `at` is the watch's own reading time, so
+show the watch "as of" it.
 
 ### `POST /api/v1/machines/:id/command`
 
@@ -1048,3 +1085,8 @@ Append only. A breaking change is a new `/api/v2`, never an edit to v1.
 
 - **v1** (2026-11-12): pairing (`daedalus://pair` v1, `POST /api/node/pair`),
   node tokens, and the endpoints above.
+- **2026-11-12**, v1 addition: accessories. `MachineItem.accessories`
+  (`AccessoryItem[]`: a phone's paired watch, empty for every other machine),
+  `DeviceView.accessories` (`AccessoryView[]`: its facts and its watchOS
+  `osReleases`), and `AppleOsReleases.os` gains `'watchos'` on a watch's list.
+  Nothing existing changed or moved.

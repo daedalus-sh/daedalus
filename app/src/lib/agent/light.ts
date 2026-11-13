@@ -1,4 +1,4 @@
-import type { NodeDetail } from '../../host/controller/generated'
+import type { NodeDetail, Telemetry } from '../../host/controller/generated'
 
 // A light node: a phone or tablet running the native app. It holds a key and
 // links to the controller like every machine, but only while its app is open,
@@ -10,6 +10,11 @@ import type { NodeDetail } from '../../host/controller/generated'
 //
 // What makes a node light is its OS, as its hello states it. The agent has no
 // capability that says so.
+//
+// An accessory is not a node at all: an Apple Watch has no key and no link.
+// Its watchOS app hands its facts to the iPhone app, which reports them
+// inside its own telemetry sample (`Telemetry.accessories`), and the box
+// keeps them with the phone's.
 //
 // Pure: the pages and the tests import it.
 
@@ -23,6 +28,23 @@ export function isLightOs(os: string | null | undefined): os is LightOs {
 /** "iPhone" or "iPad", for a label. */
 export const lightKind = (os: string): string => (os === 'ipados' ? 'iPad' : 'iPhone')
 
+/** What a phone last said about the watch paired with it. */
+export type DeviceAccessory = {
+  kind: 'watch'
+  /** What its owner called it: "Santiago’s Apple Watch". */
+  name: string | null
+  /** The device identifier: "Watch7,5". */
+  model: string | null
+  /** "26.1". */
+  osVersion: string | null
+  /** "23S37". */
+  osBuild: string | null
+  battery: { percent: number | null; charging: boolean | null } | null
+  storage: { totalBytes: number | null; freeBytes: number | null } | null
+  /** ISO time the watch read these; the phone's reading time when it did not say. */
+  at: string
+}
+
 /** What a light node last said about itself, and when the box read it. */
 export type DeviceFacts = {
   /** The device identifier: "iPhone17,1". */
@@ -34,17 +56,61 @@ export type DeviceFacts = {
   battery: { percent: number | null; charging: boolean | null } | null
   storage: { totalBytes: number | null; freeBytes: number | null } | null
   memoryBytes: number | null
+  /** What is paired with it, as its last sample listed them; empty when nothing is. */
+  accessories: DeviceAccessory[]
   /** ISO time of the reading. */
   at: string
+}
+
+/** The facts as a row holds them: one written before accessories existed has no such key. */
+export type KeptDeviceFacts = Omit<DeviceFacts, 'accessories'> & {
+  accessories?: DeviceAccessory[]
+}
+
+/** A row's facts as every reader takes them. */
+export function keptDeviceFacts(kept: KeptDeviceFacts | null): DeviceFacts | null {
+  return kept === null ? null : { ...kept, accessories: kept.accessories ?? [] }
 }
 
 const orPrior = <T>(now: T | null | undefined, prior: T | null | undefined): T | null =>
   now ?? prior ?? null
 
+/** A watch's "watchOS 26.1" → "26.1": the version alone, whichever way it was sent. */
+const bareVersion = (v: string | null): string | null => {
+  const s = v?.replace(/^watchOS\s+/i, '').trim() ?? ''
+  return s === '' ? null : s
+}
+
+/**
+ * The accessories of one sample the pages know how to draw: its watches. A
+ * kind this box does not know (the controller reads a newer app's word as
+ * `unknown`) is left out rather than drawn as something it is not.
+ */
+export function accessoriesOf(t: Pick<Telemetry, 'accessories'>, at: string): DeviceAccessory[] {
+  return (t.accessories ?? [])
+    .filter((a) => a.kind === 'watch')
+    .map((a) => ({
+      kind: 'watch' as const,
+      name: a.name,
+      model: a.model,
+      osVersion: bareVersion(a.os_version),
+      osBuild: a.os_build,
+      battery:
+        a.battery === null ? null : { percent: a.battery.percent, charging: a.battery.charging },
+      storage:
+        a.storage_total_bytes === null && a.storage_free_bytes === null
+          ? null
+          : { totalBytes: a.storage_total_bytes, freeBytes: a.storage_free_bytes },
+      at: a.sampled_at !== null && Number.isFinite(Date.parse(a.sampled_at)) ? a.sampled_at : at,
+    }))
+}
+
 /**
  * The facts in what the controller holds for the node, over what the row
  * already kept: a field the device did not report this time keeps its last
- * value. Null when the controller holds nothing new to read.
+ * value. The accessories are the exception: a sample lists them whole, so
+ * one without the watch is a phone that no longer has one. Null when the
+ * controller holds nothing new to read.
  */
 export function deviceFactsFrom(
   d: Pick<NodeDetail, 'status' | 'telemetry' | 'model' | 'agent_version'>,
@@ -73,6 +139,7 @@ export function deviceFactsFrom(
         ? (prior?.storage ?? null)
         : { totalBytes: disk.total_bytes, freeBytes: disk.free_bytes },
     memoryBytes: orPrior(t?.memory.total_bytes ?? s?.memory_bytes, prior?.memoryBytes),
+    accessories: t === null ? (prior?.accessories ?? []) : accessoriesOf(t, at),
     at,
   }
 }

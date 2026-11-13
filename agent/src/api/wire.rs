@@ -1045,7 +1045,28 @@ pub(crate) fn fixtures() -> Vec<(String, String)> {
                 node: listed,
                 public_key: "ab".repeat(32),
                 hello: Some(crate::link::wire::tests::hello()),
-                telemetry: Some(telemetry.clone()),
+                // With what only a light node reports beside itself, so the
+                // app's tests decode one as the controller writes it.
+                telemetry: Some(Telemetry {
+                    accessories: vec![crate::telemetry::Accessory {
+                        kind: crate::telemetry::AccessoryKind::Watch,
+                        name: Some("Apple Watch".into()),
+                        model: Some("Watch7,5".into()),
+                        os_name: Some("watchOS".into()),
+                        os_version: Some("26.1".into()),
+                        os_build: Some("23S37".into()),
+                        battery: Some(crate::telemetry::Battery {
+                            percent: Some(64.0),
+                            charging: Some(false),
+                            low_power: Some(false),
+                            ..Default::default()
+                        }),
+                        storage_total_bytes: Some(64_000_000_000),
+                        storage_free_bytes: Some(41_000_000_000),
+                        sampled_at: Some("2026-09-27T10:00:05Z".into()),
+                    }],
+                    ..telemetry.clone()
+                }),
                 telemetry_at: Some("2026-09-27T10:00:15Z".into()),
                 providers: Some(vec![provider_report()]),
                 providers_at: Some("2026-09-28T10:00:01Z".into()),
@@ -2008,6 +2029,18 @@ mod tests {
                 r#""browsers":[],"apps":[],"app_count":null,"updates":null,"errors":[]}}"#
             )
         );
+        // An accessory is a key only of a document that has one: an agent's
+        // stays as it was (above), a phone's carries its watch.
+        let with = serde_json::to_string(&Telemetry {
+            accessories: vec![crate::telemetry::Accessory::default()],
+            ..Default::default()
+        })
+        .unwrap();
+        assert!(with.contains(concat!(
+            r#""battery":null,"accessories":[{"kind":"unknown","name":null,"model":null,"#,
+            r#""os_name":null,"os_version":null,"os_build":null,"battery":null,"#,
+            r#""storage_total_bytes":null,"storage_free_bytes":null,"sampled_at":null}],"processes":[]"#
+        )));
     }
 
     pub fn santree_status() -> SantreeStatus {

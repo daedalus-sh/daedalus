@@ -46,9 +46,9 @@ pub use metrics::{
     claude_text, escape_label, light_metrics_text, metrics_text, providers_text, typed, Labels,
 };
 pub use model::{
-    App, Battery, Browser, Cpu, Disk, Drive, Gpu, GpuSample, Installed, Machine, Memory,
-    MemoryModule, Network, Os, Process, Sample, Service, Slow, Static, Telemetry, Temperature,
-    Update, Updates,
+    Accessory, AccessoryKind, App, Battery, Browser, Cpu, Disk, Drive, Gpu, GpuSample, Installed,
+    Machine, Memory, MemoryModule, Network, Os, Process, Sample, Service, Slow, Static, Telemetry,
+    Temperature, Update, Updates,
 };
 
 use crate::util::Shutdown;
@@ -142,6 +142,8 @@ pub fn assemble(s: &Static, w: &Slow, p: &Sample, updates: Option<&Updates>) -> 
         temperatures: p.temperatures.clone(),
         network: p.network.clone(),
         battery: p.battery.clone(),
+        // A light node's to report: an agent has none.
+        accessories: Vec::new(),
         processes: p.processes.clone(),
         process_count: p.process_count,
         services: w.services.clone(),

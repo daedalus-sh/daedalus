@@ -818,7 +818,7 @@ impl Registry {
                 Err(err) => bad("status document", err),
             },
             name::TELEMETRY => match serde_json::from_value::<Telemetry>(p) {
-                Ok(t) => entry.telemetry = Some((t, at)),
+                Ok(t) => entry.telemetry = Some((t.bounded(), at)),
                 Err(err) => bad("telemetry document", err),
             },
             name::CLAUDE => match serde_json::from_value::<Option<Report>>(p) {

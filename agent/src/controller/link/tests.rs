@@ -2253,7 +2253,19 @@ fn phone_telemetry() -> serde_json::Value {
         "os": {"build": "24A335"},
         "memory": {"total_bytes": 8_000_000_000u64, "used_bytes": 5_000_000_000u64},
         "disks": [{"mount": "/", "total_bytes": 256_000_000_000u64, "free_bytes": 100_000_000_000u64}],
-        "battery": {"percent": 82.0, "charging": true, "low_power": false}
+        "battery": {"percent": 82.0, "charging": true, "low_power": false},
+        "accessories": [{
+            "kind": "watch",
+            "name": "Santiago’s Apple Watch",
+            "model": "Watch7,5",
+            "os_name": "watchOS",
+            "os_version": "26.1",
+            "os_build": "23S37",
+            "battery": {"percent": 64.0, "charging": false, "low_power": false},
+            "storage_total_bytes": 64_000_000_000u64,
+            "storage_free_bytes": 41_000_000_000u64,
+            "sampled_at": "2026-11-12T09:58:30Z"
+        }]
     })
 }
 
@@ -2395,6 +2407,25 @@ fn a_light_node_reports_its_telemetry_and_is_asked_nothing() {
         (None, None, None)
     );
     assert_eq!((b.health_pct, b.cycles), (None, None));
+    // Its watch, as it reported it: kept with the document, never a node.
+    assert_eq!(t.accessories.len(), 1);
+    let w = &t.accessories[0];
+    assert_eq!(w.kind, crate::telemetry::AccessoryKind::Watch);
+    assert_eq!(
+        (
+            w.name.as_deref(),
+            w.model.as_deref(),
+            w.os_version.as_deref()
+        ),
+        (
+            Some("Santiago’s Apple Watch"),
+            Some("Watch7,5"),
+            Some("26.1")
+        )
+    );
+    assert_eq!(w.battery.as_ref().and_then(|b| b.percent), Some(64.0));
+    assert_eq!(w.storage_free_bytes, Some(41_000_000_000));
+    assert_eq!(ctl.registry.list().len(), 1);
     let s = d.node;
     assert_eq!(s.kind, wire::NodeKind::Light);
     assert_eq!(s.form.as_deref(), Some("phone"));
@@ -2461,6 +2492,16 @@ fn a_light_node_reports_its_telemetry_and_is_asked_nothing() {
         value("daedalus_agent_battery_low_power{").as_deref(),
         Some("0")
     );
+    assert_eq!(
+        value("daedalus_agent_accessory_battery_percent{").as_deref(),
+        Some("64")
+    );
+    assert!(mine
+        .iter()
+        .any(|l| l.starts_with("daedalus_agent_accessory_info{")
+            && l.contains(r#"machine="iPhone""#)
+            && l.contains(r#"accessory="Santiago’s Apple Watch",kind="watch",model="Watch7,5",os_version="26.1""#)
+            && l.ends_with(" 1")));
     assert!(has("daedalus_agent_memory_total_bytes{"));
     assert!(has("daedalus_agent_disk_free_bytes{"));
     assert!(mine.iter().any(|l| l.starts_with("daedalus_agent_info{")

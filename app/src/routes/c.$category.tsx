@@ -130,6 +130,8 @@ export const Route = createFileRoute('/c/$category')({
                 // A phone's list is read from what it last said it runs, so
                 // it is asked for whether or not the phone is connected.
                 ios: isLightOs(nodeOs) && nodeTab === 'ios',
+                // Its watch's list likewise, for the Device tab's Watch board.
+                watch: isLightOs(nodeOs) && nodeTab === 'host',
               },
             }),
       nodeClaude:

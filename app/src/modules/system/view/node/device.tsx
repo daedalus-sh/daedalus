@@ -4,6 +4,7 @@ import { deviceFactsFrom, lightKind } from '../../../../lib/agent/light'
 import type { NodeSystemData } from '../../../../lib/dashboard/node-system'
 import { bytes, DASH, pct } from '../../../../lib/format'
 import { EMPTY, FOOT, lightOsName, loadTone, MONO, NOTE, share } from './shared'
+import { WatchBoard, WatchReleasesBoard } from './watch'
 
 /* ── Device ───────────────────────────────────────────────────────────── */
 
@@ -16,6 +17,9 @@ import { EMPTY, FOOT, lightOsName, loadTone, MONO, NOTE, share } from './shared'
  * from the device's last connection — the same facts, with the time they were
  * read beside them. Being away is the device's usual state and is said as
  * when it was last seen, never as a fault.
+ *
+ * Its watch, when it has one, follows: an accessory the phone reports beside
+ * itself (./watch.tsx), never a machine of its own.
  */
 export function NodeDeviceView({ d }: { d: NodeSystemData }) {
   const { node } = d
@@ -145,6 +149,11 @@ export function NodeDeviceView({ d }: { d: NodeSystemData }) {
           now, which iOS can enlarge by clearing caches.
         </p>
       </Board>
+
+      {d.accessories.flatMap((a, i) => [
+        <WatchBoard key={`watch-${String(i)}`} a={a} phone={kind} />,
+        <WatchReleasesBoard key={`watch-releases-${String(i)}`} a={a} />,
+      ])}
     </BoardGrid>
   )
 }

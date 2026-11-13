@@ -6,7 +6,7 @@ import { db } from '../../host/db'
 import { householdMacs } from '../../host/dhcp-hosts'
 import { fingerprintOf } from '../../host/enroll'
 import { type NodePolicy, type NodeState, nodes } from '../../host/schema'
-import { type DeviceFacts, isLightOs } from '../agent/light'
+import { type DeviceFacts, isLightOs, keptDeviceFacts } from '../agent/light'
 import type { NodeForFile } from '../nodes-file'
 import { netNameOf } from '../nodes-file'
 import { DEFAULT_PORT, NODE_PROVIDER_KINDS, type ProviderKind } from '../providers/kinds'
@@ -115,7 +115,7 @@ function row(
     claude: s?.claude ?? null,
     lastSeenAgo: (Date.now() - lastSeen) / 1000,
     light: isLightOs(n.os),
-    device: n.device,
+    device: keptDeviceFacts(n.device),
   }
 }
 

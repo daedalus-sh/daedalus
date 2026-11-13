@@ -733,8 +733,13 @@ mod tests {
             .unwrap()
             .with_cadence(fast());
         // Handed before the link is up: pushed once it is.
-        link.report(&serde_json::json!({"sampled_at": "t0", "battery": {"percent": 80.0}}))
-            .unwrap();
+        // With a watch beside it: the document goes as it was handed, whole.
+        let watch = serde_json::json!([{"kind": "watch", "model": "Watch7,5",
+            "os_version": "26.1", "battery": {"percent": 64.0, "charging": false}}]);
+        link.report(&serde_json::json!({
+            "sampled_at": "t0", "battery": {"percent": 80.0}, "accessories": watch
+        }))
+        .unwrap();
         let (stop, thread) = start(&link);
         let h: Value = serde_json::from_str(&next(&rx, "\"hello\"")).unwrap();
         assert_eq!(h["p"]["node_id"], me.node_id());
@@ -747,7 +752,9 @@ mod tests {
         let status: Value = serde_json::from_str(&next(&rx, "\"e\":\"status\"")).unwrap();
         assert_eq!(status["p"]["os"], "ios");
         assert_eq!(status["p"]["version"], "1.0.0");
-        assert!(next(&rx, "\"e\":\"telemetry\"").contains("\"t0\""));
+        let first: Value = serde_json::from_str(&next(&rx, "\"e\":\"telemetry\"")).unwrap();
+        assert_eq!(first["p"]["sampled_at"], "t0");
+        assert_eq!(first["p"]["accessories"], watch);
         let refusal = next(&rx, "\"id\":7");
         assert!(refusal.contains("\"unsupported\""), "{refusal}");
         wait_for("approved", || {

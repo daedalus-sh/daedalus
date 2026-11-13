@@ -327,6 +327,24 @@ mod tests {
                 take(daedalus_report(c(r#"{"sampled_at":"t"}"#).as_ptr())),
                 json!({"ok": true})
             );
+            // With the paired watch beside the device (the header's example):
+            // the document is the link's as handed, accessories and all.
+            let with_watch = json!({
+                "sampled_at": "2026-11-12T10:00:00Z",
+                "battery": {"percent": 82, "charging": true, "low_power": false},
+                "accessories": [{
+                    "kind": "watch", "name": "Santiago’s Apple Watch", "model": "Watch7,5",
+                    "os_name": "watchOS", "os_version": "26.1", "os_build": "23S37",
+                    "battery": {"percent": 64, "charging": false, "low_power": false},
+                    "storage_total_bytes": 64_000_000_000u64,
+                    "storage_free_bytes": 41_000_000_000u64,
+                    "sampled_at": "2026-11-12T09:58:30Z"
+                }]
+            });
+            assert_eq!(
+                take(daedalus_report(c(&with_watch.to_string()).as_ptr())),
+                json!({"ok": true})
+            );
             for (bad, why) in [("[1]", "not a JSON object"), ("nope", "not JSON")] {
                 let e = take(daedalus_report(c(bad).as_ptr()));
                 assert!(e["error"].as_str().unwrap().contains(why), "{e}");

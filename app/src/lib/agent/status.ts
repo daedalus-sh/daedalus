@@ -1,4 +1,5 @@
 import type {
+  Accessory,
   App,
   Battery,
   Browser,
@@ -363,6 +364,23 @@ const battery = reads<Battery>()(
   }),
 )
 
+// What a phone reports beside itself: its watch (lib/agent/light.ts). A kind
+// a newer app names is `unknown` by the time the controller answers.
+const accessory = reads<Accessory>()(
+  obj({
+    kind: oneOf<Accessory['kind']>({ watch: true, unknown: true }),
+    name: nstr,
+    model: nstr,
+    os_name: nstr,
+    os_version: nstr,
+    os_build: nstr,
+    battery: nullable(battery),
+    storage_total_bytes: nnum,
+    storage_free_bytes: nnum,
+    sampled_at: nstr,
+  }),
+)
+
 const browser = reads<Browser>()(
   obj({
     name: str,
@@ -440,6 +458,7 @@ export const telemetry = reads<Telemetry>()(
     temperatures: arrayOf(obj({ label: str, celsius: num })),
     network: arrayOf(network),
     battery: nullable(battery),
+    accessories: absent(arrayOf(accessory)),
     processes: arrayOf(obj({ name: str, pid: int, memory_bytes: nnum, cpu_pct: nnum })),
     process_count: nint,
     services: arrayOf(obj({ name: str, display: nstr, state: str, exit_code: nint })),

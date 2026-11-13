@@ -20,6 +20,7 @@ export const fetchNodeSystemFn = readFn
           browsers: flagField,
           macos: flagField,
           ios: flagField,
+          watch: flagField,
         }),
         'expected a node id',
       ),
@@ -32,6 +33,7 @@ export const fetchNodeSystemFn = readFn
       browsers: data.browsers,
       macos: data.macos,
       ios: data.ios,
+      watch: data.watch,
     })
   })
 

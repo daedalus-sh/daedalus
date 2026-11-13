@@ -196,6 +196,19 @@ has no Claude, provider, services or application series; its battery is
 `battery_percent`, `battery_charging` and `battery_low_power`.
 `nodes.list` names it by `kind`.
 
+What is paired with a light node and is not a node itself rides in its
+telemetry: `accessories` (`src/telemetry/model.rs` `Accessory`), today an
+Apple Watch (`kind: "watch"`; any other word reads as `unknown`) with
+its name, model, watchOS version and build, battery, storage and the time
+the watch read them. The key is absent when there is none, so an agent's
+document is what it was. The controller keeps the first four of a sample
+with each text cut to 256 bytes (`Telemetry::bounded`), answers them in
+`nodes.get {full: true}`, and serves two families per accessory on
+`/nodes/metrics`, labelled like every series of the machine plus
+`accessory` (its name, else its model) and `kind`:
+`daedalus_agent_accessory_info{…,model,os_version}` = 1 and
+`daedalus_agent_accessory_battery_percent`. Nothing alerts on either.
+
 ## The link to the controller
 
 Every machine keeps ONE outbound connection to the controller, and only

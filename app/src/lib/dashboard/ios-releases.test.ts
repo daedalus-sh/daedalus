@@ -166,3 +166,122 @@ describe('the summary line', () => {
     expect(releaseSummary(null, null)).toBeNull()
   })
 })
+
+// A watch is read from the same three pages. The rows and builds below are
+// Apple's own, as support.apple.com/100100 and gdmf.apple.com/v2/pmv served
+// them on 2026-11-12.
+describe('watchOS', () => {
+  const WATCH_TABLE = `<table>
+${[
+  row(
+    'iOS 27.2.1 and iPadOS 27.2.1',
+    'https://support.apple.com/en-us/149715',
+    'iPhone 11 and later',
+    '09 Nov 2026',
+  ),
+  row(
+    'watchOS 27.2.1',
+    'https://support.apple.com/en-us/149722',
+    'Apple Watch Series 9 and later',
+    '09 Nov 2026',
+  ),
+  row(
+    'watchOS 26.6.1',
+    'https://support.apple.com/en-us/149723',
+    'Apple Watch Series 6, Apple Watch Series 7, Apple Watch Series 8, Apple Watch SE (2nd generation), and Apple Watch Ultra',
+    '09 Nov 2026',
+  ),
+  row(
+    'watchOS 27.2',
+    'https://support.apple.com/en-us/149525',
+    'Apple Watch Series 9 and later',
+    '26 Oct 2026',
+  ),
+  // One release, listed once per group of watches that got it.
+  row('watchOS 27.0.1', null, 'Apple Watch Series 9 and later', '28 Sep 2026', NONE),
+  row('watchOS 27.0.1', null, 'Apple Watch Series 12 and Apple Watch Ultra 4', '23 Sep 2026', NONE),
+  row(
+    'watchOS 27',
+    'https://support.apple.com/en-us/149037',
+    'Apple Watch Series 9 and later',
+    '14 Sep 2026',
+  ),
+  row(
+    'watchOS 26.6',
+    'https://support.apple.com/en-us/128068',
+    'Apple Watch Series 6 and later',
+    '27 Jul 2026',
+  ),
+].join('\n')}
+</table>`
+
+  it('keeps the rows that name watchOS, one per version', () => {
+    const rows = parseIosTable(WATCH_TABLE, 'watchos')
+    expect(rows.map((r) => r.version)).toEqual(['27.2.1', '26.6.1', '27.2', '27.0.1', '27', '26.6'])
+    expect(rows[0]).toEqual({
+      version: '27.2.1',
+      date: '2026-11-09',
+      url: 'https://support.apple.com/en-us/149722',
+      note: null,
+    })
+    expect(rows[3]).toEqual({
+      version: '27.0.1',
+      date: '2026-09-28',
+      url: null,
+      note: 'This update has no published CVE entries.',
+    })
+  })
+
+  it('is no phone’s release, and a phone’s is not a watch’s', () => {
+    expect(parseIosTable(WATCH_TABLE, 'ios').map((r) => r.version)).toEqual(['27.2.1'])
+    expect(parseIosTable(WATCH_TABLE, 'ipados').map((r) => r.version)).toEqual(['27.2.1'])
+    expect(parseIosTable(TABLE, 'watchos').map((r) => r.version)).toEqual(['27'])
+  })
+
+  const set = (ProductVersion: string, Build: string, SupportedDevices: string[]) => ({
+    ProductVersion,
+    Build,
+    PostingDate: '2026-11-09',
+    ExpirationDate: '2027-02-10',
+    SupportedDevices,
+  })
+  const SERIES_9_UP = ['Watch7,1', 'Watch7,5', 'Watch7,8', 'Watch8,1', 'Watch8,5']
+  const SERIES_6_TO_8 = ['Watch6,1', 'Watch6,18', 'Watch6,6']
+  const feed = parsePmv(
+    JSON.stringify({
+      PublicAssetSets: {
+        iOS: [
+          set('27.2.1', '24B92034', ['iPhone19,4']),
+          set('26.6.1', '23U95', SERIES_6_TO_8),
+          set('27.2.1', '24S132', SERIES_9_UP),
+          set('27.2', '24K6154', ['AppleTV14,1']),
+          set('26.6.1', '23U6095', SERIES_6_TO_8),
+          set('27.2.1', '24S6132', SERIES_9_UP),
+        ],
+      },
+    }),
+    'iOS',
+  )
+
+  it('takes its build from the builds that list a watch', () => {
+    expect(iosBuildFor(feed.get('27.2.1'), 'watchos', 'Watch7,5')).toBe('24S132')
+    expect(iosBuildFor(feed.get('26.6.1'), 'watchos', 'Watch6,18')).toBe('23U95')
+    // The model unknown, or one the version does not list: the family's.
+    expect(iosBuildFor(feed.get('27.2.1'), 'watchos', null)).toBe('24S132')
+    expect(iosBuildFor(feed.get('27.2.1'), 'watchos', 'Watch6,1')).toBe('24S132')
+    // A version no watch got has no watch build, and a watch's is no phone's.
+    expect(iosBuildFor(feed.get('27.2'), 'watchos', 'Watch7,5')).toBeNull()
+    expect(iosBuildFor(feed.get('26.6.1'), 'ios', null)).toBeNull()
+  })
+
+  it('names its own notes pages', () => {
+    expect(iosNotesSlugs('27.2.1', 'watchos')).toEqual([
+      'watchos-27_2-release-notes',
+      'watchos-27-release-notes',
+    ])
+    expect(iosNotesSlugs('27.0', 'watchos')).toEqual([
+      'watchos-27_0-release-notes',
+      'watchos-27-release-notes',
+    ])
+  })
+})

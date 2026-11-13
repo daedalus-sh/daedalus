@@ -263,6 +263,14 @@ export type ClaudeSummary = {
 
 export type BatteryView = { percent: number | null; charging: boolean | null }
 
+/** What is paired with a phone and is no machine itself: its watch, as the phone last reported it. */
+export type AccessoryItem = {
+  kind: 'watch'
+  /** What its owner called it; null when the phone did not say. */
+  name: string | null
+  battery: BatteryView | null
+}
+
 export type MachineItem = {
   /** `box`, or a node id (16 hex). */
   id: string
@@ -288,12 +296,14 @@ export type MachineItem = {
   restartPending: boolean
   claude: ClaudeSummary | null
   battery: BatteryView | null
+  /** A phone's paired watch; empty for every other machine and for a phone without one. */
+  accessories: AccessoryItem[]
 }
 
 export type Machines = { machines: MachineItem[] }
 
 export type AppleOsReleases = {
-  os: 'ios' | 'ipados'
+  os: 'ios' | 'ipados' | 'watchos'
   current: { version: string; build: string | null }
   latest: string | null
   behind: number
@@ -348,6 +358,21 @@ export type MachineSystem = {
   osRebootPending: boolean | null
 }
 
+/** A phone's watch: what the phone last said about it, and what Apple has published past its watchOS. */
+export type AccessoryView = AccessoryItem & {
+  /** The device identifier: "Watch7,5". */
+  model: string | null
+  /** "26.1". */
+  osVersion: string | null
+  /** "23S37". */
+  osBuild: string | null
+  storage: { totalBytes: number | null; freeBytes: number | null } | null
+  /** When the watch read these facts; they reach the box only through its phone. */
+  at: string
+  /** `os` is `watchos`. Null when the watch has not said which watchOS it runs. */
+  osReleases: AppleOsReleases | null
+}
+
 /** What a phone or tablet last said about itself, kept by the box across disconnections. */
 export type DeviceView = {
   model: string | null
@@ -356,6 +381,8 @@ export type DeviceView = {
   battery: BatteryView | null
   storage: { totalBytes: number | null; freeBytes: number | null } | null
   memoryBytes: number | null
+  /** Its paired watch, as its last sample listed it; empty when it has none. */
+  accessories: AccessoryView[]
   /** When the box read it. */
   at: string
 }

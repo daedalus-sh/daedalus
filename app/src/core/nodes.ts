@@ -16,7 +16,13 @@ import { fingerprintOf, releaseTunnel } from '../host/enroll'
 import { requestGatewaySync } from '../host/gateway-sync'
 import type { NodePolicy } from '../host/schema'
 import { readSessionHost } from '../host/session-host'
-import { deviceFactsFrom, isLightOs, lightKind, sameDeviceFacts } from '../lib/agent/light'
+import {
+  deviceFactsFrom,
+  isLightOs,
+  keptDeviceFacts,
+  lightKind,
+  sameDeviceFacts,
+} from '../lib/agent/light'
 import { keepLifecycle } from '../lib/agent/policy-patch'
 import { netNameOf } from '../lib/nodes-file'
 import { enrollStore } from '../lib/repo/enroll'
@@ -344,8 +350,9 @@ async function recordDevices(
     if (n.state !== 'approved' || !isLightOs(n.os) || seen.get(n.id)?.connected !== true) continue
     try {
       const d = await ctx.controller.call('nodes.get', { id: n.id, full: true })
-      const facts = deviceFactsFrom(d, n.device, new Date().toISOString())
-      if (facts !== null && !sameDeviceFacts(facts, n.device)) await writeDevice(n.id, facts)
+      const kept = keptDeviceFacts(n.device)
+      const facts = deviceFactsFrom(d, kept, new Date().toISOString())
+      if (facts !== null && !sameDeviceFacts(facts, kept)) await writeDevice(n.id, facts)
     } catch (e) {
       console.warn(
         `nodes: ${n.id}'s device facts not kept: ${e instanceof Error ? e.message : String(e)}`,

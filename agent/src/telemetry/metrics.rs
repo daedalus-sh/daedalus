@@ -227,6 +227,35 @@ fn render(t: &Telemetry, agent_version: &str, labels: &Labels, light: bool) -> S
             gauge("battery_low_power", "", f64::from(u8::from(v)));
         }
     }
+    // A light node's accessories (model.rs `Accessory`), each under the
+    // name its owner gave it, else its model, else its place in the list.
+    // Two of one name would be two samples of one series, which fails the
+    // whole scrape: the first keeps the name.
+    let mut named: Vec<String> = Vec::new();
+    for (i, a) in t.accessories.iter().enumerate() {
+        let name = a
+            .name
+            .clone()
+            .or_else(|| a.model.clone())
+            .unwrap_or_else(|| i.to_string());
+        if named.contains(&name) {
+            continue;
+        }
+        let l = format!("accessory=\"{}\",kind=\"{}\"", esc(&name), a.kind.as_str());
+        gauge(
+            "accessory_info",
+            &format!(
+                "{l},model=\"{}\",os_version=\"{}\"",
+                esc(a.model.as_deref().unwrap_or("")),
+                esc(a.os_version.as_deref().unwrap_or(""))
+            ),
+            1.0,
+        );
+        if let Some(v) = a.battery.as_ref().and_then(|b| b.percent) {
+            gauge("accessory_battery_percent", &l, v);
+        }
+        named.push(name);
+    }
     out
 }
 
@@ -386,6 +415,50 @@ mod tests {
         for line in m.lines() {
             assert!(line.contains(&format!("{{{BASE}")), "{line}");
         }
+    }
+
+    #[test]
+    fn accessories_are_series_of_their_machine() {
+        use crate::telemetry::{Accessory, AccessoryKind, Battery};
+        let watch = |name: Option<&str>, percent: Option<f64>| Accessory {
+            kind: AccessoryKind::Watch,
+            name: name.map(str::to_string),
+            model: Some("Watch7,5".into()),
+            os_version: Some("26.1".into()),
+            battery: percent.map(|p| Battery {
+                percent: Some(p),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let t = Telemetry {
+            accessories: vec![
+                watch(Some("My \"Watch\""), Some(64.0)),
+                // The same name again: no second sample of the series.
+                watch(Some("My \"Watch\""), Some(10.0)),
+                // No name: its model; no battery: no battery series.
+                watch(None, None),
+                Accessory::default(),
+            ],
+            ..Default::default()
+        };
+        for text in [metrics_text(&t, "1", &PC), light_metrics_text(&t, "1", &PC)] {
+            let lines: Vec<&str> = text
+                .lines()
+                .filter(|l| l.starts_with("daedalus_agent_accessory_"))
+                .collect();
+            assert_eq!(
+                lines,
+                vec![
+                    format!("daedalus_agent_accessory_info{{{BASE},accessory=\"My \\\"Watch\\\"\",kind=\"watch\",model=\"Watch7,5\",os_version=\"26.1\"}} 1"),
+                    format!("daedalus_agent_accessory_battery_percent{{{BASE},accessory=\"My \\\"Watch\\\"\",kind=\"watch\"}} 64"),
+                    format!("daedalus_agent_accessory_info{{{BASE},accessory=\"Watch7,5\",kind=\"watch\",model=\"Watch7,5\",os_version=\"26.1\"}} 1"),
+                    format!("daedalus_agent_accessory_info{{{BASE},accessory=\"3\",kind=\"unknown\",model=\"\",os_version=\"\"}} 1"),
+                ]
+            );
+        }
+        // A machine without one has neither family.
+        assert!(!metrics_text(&Telemetry::default(), "1", &PC).contains("accessory"));
     }
 
     #[test]

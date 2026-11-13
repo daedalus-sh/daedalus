@@ -14,7 +14,7 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core'
-import type { DeviceFacts } from '../lib/agent/light'
+import type { KeptDeviceFacts } from '../lib/agent/light'
 // Types, plus the vocabulary tuples the CHECK constraints below are built from.
 // Each value import is a pure leaf of lib/ (no node builtin, no database), so
 // drizzle-kit loads it with the schema and the boundary test has nothing to
@@ -629,7 +629,7 @@ export const nodes = pgTable(
     /// What a phone or tablet last said it is (lib/agent/light.ts): kept
     /// because such a node is connected only while its app is open, and the
     /// controller forgets it on a restart. Null for every other machine.
-    device: jsonb('device').$type<DeviceFacts>(),
+    device: jsonb('device').$type<KeptDeviceFacts>(),
   },
   (t) => [check('nodes_state_check', oneOf(t.state, NODE_STATES))],
 )

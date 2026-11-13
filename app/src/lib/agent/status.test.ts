@@ -23,7 +23,19 @@ describe('a machine’s documents', () => {
     expect(s.hostname).toBe('PC')
     expect(s.controller?.state).toBe('approved')
     expect(s.claude?.state).toBe('running')
-    expect(decode(telemetry, detail.telemetry).sampled_at).toBe('2026-09-27T10:00:15Z')
+    const t = decode(telemetry, detail.telemetry)
+    expect(t.sampled_at).toBe('2026-09-27T10:00:15Z')
+    // A phone's watch, as the controller writes it; an agent's document has no such key.
+    expect(t.accessories).toHaveLength(1)
+    expect(t.accessories?.[0]).toMatchObject({
+      kind: 'watch',
+      model: 'Watch7,5',
+      os_version: '26.1',
+      battery: { percent: 64, charging: false, low_power: false },
+      storage_free_bytes: 41_000_000_000,
+    })
+    const open = decode(telemetry, fixture('telemetry.get').telemetry)
+    expect(open.accessories).toBeUndefined()
     const r = decode(report, fixture('nodes.claude').report)
     expect(r.sessions[0]?.alive).toBe(true)
     expect(r.last_line).toBeUndefined()

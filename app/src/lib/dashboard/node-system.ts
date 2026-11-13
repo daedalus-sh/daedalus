@@ -1,7 +1,12 @@
 import type { Ctx } from '../../core/ctx'
-import type { ProviderReport, StatusDocument, Telemetry } from '../../host/controller/generated'
+import type {
+  NodeDetail,
+  ProviderReport,
+  StatusDocument,
+  Telemetry,
+} from '../../host/controller/generated'
 import { readNode } from '../../host/controller/nodes'
-import { isLightOs } from '../agent/light'
+import { type DeviceAccessory, deviceFactsFrom, isLightOs } from '../agent/light'
 import { getNode, type NodeRow } from '../repo/nodes'
 import { type BoardReleases, boardReleases } from './board-releases'
 import { type BrowserLatest, browserLatest } from './browser-releases'
@@ -21,6 +26,12 @@ import { type MacReleases, macosReleases } from './macos-releases'
 // not five requests. A machine that is not connected shows what the
 // controller last heard from it, and nothing once the controller has
 // restarted since.
+
+/** A phone's watch: what the phone last said about it, and Apple's list past its watchOS when asked for. */
+export type NodeAccessory = DeviceAccessory & {
+  /** Null when not asked for, or when the watch has not said which watchOS it runs. */
+  releases: AppleOsReleases | null
+}
 
 export type NodeSystemData = {
   node: NodeRow
@@ -43,6 +54,12 @@ export type NodeSystemData = {
   macos: MacReleases | null
   /** What Apple has shipped past a phone's or tablet's OS, read only for its Software tab. */
   ios: AppleOsReleases | null
+  /**
+   * A phone's paired watch, from its live sample when the controller holds
+   * one and from what the box kept when it does not; empty for every other
+   * machine. Its `releases` are read only for the Device tab.
+   */
+  accessories: NodeAccessory[]
   /** Processor busy, six hours at two-minute steps, from the box's Prometheus. */
   cpuSpark: number[]
   error: string | null
@@ -51,7 +68,13 @@ export type NodeSystemData = {
 export async function loadNodeSystem(
   ctx: Pick<Ctx, 'controller' | 'prom'>,
   id: string,
-  opts: { board?: boolean; browsers?: boolean; macos?: boolean; ios?: boolean } = {},
+  opts: {
+    board?: boolean
+    browsers?: boolean
+    macos?: boolean
+    ios?: boolean
+    watch?: boolean
+  } = {},
 ): Promise<NodeSystemData | null> {
   // One read: the machine, its status, its full telemetry and its providers.
   // The spark does not need the machine: it is what the box has scraped,
@@ -71,6 +94,7 @@ export async function loadNodeSystem(
     opts.ios === true && isLightOs(node.os)
       ? await iosFor(node, d?.status?.os_version || null)
       : null
+  const accessories = isLightOs(node.os) ? await accessoriesFor(node, d, opts.watch === true) : []
   const none = {
     node,
     status: null,
@@ -80,6 +104,7 @@ export async function loadNodeSystem(
     browserLatest: null,
     macos: null,
     ios,
+    accessories,
     cpuSpark,
   }
   if (d === null) return { ...none, error: read.error }
@@ -133,4 +158,31 @@ async function iosFor(node: NodeRow, live: string | null): Promise<AppleOsReleas
   const version = live ?? node.device?.osVersion ?? null
   if (version === null || version === '' || !isLightOs(node.os)) return null
   return iosReleases(node.os, version, node.device?.model ?? null)
+}
+
+/**
+ * The watch a phone reports beside itself: the live sample's list over the
+ * row's (lib/agent/light.ts `deviceFactsFrom`), each with Apple's watchOS
+ * list when `releases` asks for it.
+ */
+async function accessoriesFor(
+  node: NodeRow,
+  d: NodeDetail | null,
+  releases: boolean,
+): Promise<NodeAccessory[]> {
+  const live = d === null ? null : deviceFactsFrom(d, node.device, new Date().toISOString())
+  const list = (live ?? node.device)?.accessories ?? []
+  return Promise.all(
+    list.map(async (a) => ({
+      ...a,
+      releases:
+        releases && a.osVersion !== null
+          ? await iosReleases(
+              'watchos',
+              a.osBuild === null ? a.osVersion : `${a.osVersion} (${a.osBuild})`,
+              a.model,
+            )
+          : null,
+    })),
+  )
 }

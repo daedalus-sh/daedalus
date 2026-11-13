@@ -63,9 +63,32 @@ char *daedalus_start(const char *config_json);
  *    "os":{"build":"24A335","kernel":"…"},
  *    "memory":{"total_bytes":…,"used_bytes":…,"available_bytes":…},
  *    "disks":[{"mount":"/","total_bytes":…,"free_bytes":…,"used_bytes":…}],
- *    "battery":{"percent":0-100,"charging":bool,"low_power":bool}}
+ *    "battery":{"percent":0-100,"charging":bool,"low_power":bool},
+ *    "accessories":[…]}
  * Sent now if the link is up and approved, else as soon as it is, and again
  * every minute until the next sample. Answer: {"ok":true}
+ *
+ * accessories: what is paired with the device and is not a node itself —
+ * an Apple Watch, whose watchOS app hands its facts to the iPhone app. One
+ * object each, every key but kind optional (leave out, or null, what the
+ * watch did not say); leave the key out, or send [], when there is none:
+ *   "accessories":[{"kind":"watch",
+ *                   "name":"Santiago’s Apple Watch",
+ *                   "model":"Watch7,5",
+ *                   "os_name":"watchOS","os_version":"26.1","os_build":"23S37",
+ *                   "battery":{"percent":64,"charging":false,"low_power":false},
+ *                   "storage_total_bytes":64000000000,
+ *                   "storage_free_bytes":41000000000,
+ *                   "sampled_at":"2026-11-12T09:58:30Z"}]
+ * sampled_at is when the WATCH read its facts (RFC 3339 UTC), not when the
+ * phone sends them: repeat the watch's last reading with its own time until
+ * a newer one arrives, and the box shows how old it is. The box keeps the
+ * first 4 accessories of a sample and cuts each text to 256 bytes; a kind
+ * it does not know reads as "unknown". Every sample replaces the last one
+ * whole, so a sample without the watch is a phone without one. The byte
+ * counts are whole numbers (no fraction, no exponent); as everywhere in the
+ * document, a value of the wrong type makes the controller drop the whole
+ * sample, the phone's own facts with it.
  */
 char *daedalus_report(const char *telemetry_json);
 

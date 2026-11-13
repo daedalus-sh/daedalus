@@ -490,6 +490,18 @@ off), nothing nix builds reads it (it is left out of `site/nodes.json`), and
 the box keeps what it last said about itself in its row (`nodes.device`),
 because the controller forgets everything on a restart.
 
+**Its watch is not a node.** An Apple Watch holds no key, no tunnel and no
+link: its watchOS app hands its facts to the iPhone app, which reports them
+inside its own telemetry sample (`Telemetry.accessories`: kind, name, model,
+watchOS version and build, battery, storage, and when the watch read
+them). The controller keeps at most four per sample, with the phone's
+document, and the box keeps them in the phone's row with the rest
+(`nodes.device.accessories`); a sample lists them whole, so one without the
+watch is a phone without one. The watch is drawn under its phone — a Watch
+board on the phone's Device tab with Apple's watchOS releases beside it, a
+line of the phone's row on Settings › Machines, `accessories` on the
+phone in `/api/v1` — and never in the machine list or the System picker.
+
 **It joins by scanning a code** (`app/src/host/pair.ts`). "Add a phone or
 tablet" makes a wg-easy client confined to two ports and a single-use ticket,
 and shows both once as a QR code. The app brings that tunnel up inside
