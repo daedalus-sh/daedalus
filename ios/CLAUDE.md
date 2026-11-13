@@ -32,5 +32,5 @@
   iPhone app's version.
 - Model types that cross actors are `nonisolated struct …: Codable, Sendable`.
 - App identity lives only in `Config/App.xcconfig` and `Config/Watch.xcconfig`.
-- Test: `cd ios/Packages/DaedalusKit && xcodebuild test -scheme DaedalusKit -destination 'platform=iOS Simulator,name=<an available iPhone>'`
+- Test: `cd ios/Packages/DaedalusKit && xcodebuild test -scheme DaedalusKit-Package -destination 'platform=iOS Simulator,name=<an available iPhone>'`
 - Build: `ios/scripts/build-core.sh`, then `cd ios && xcodebuild build -project Daedalus.xcodeproj -scheme Daedalus -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO`

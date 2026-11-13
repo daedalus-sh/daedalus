@@ -104,7 +104,8 @@ jobs:
             -destination "id=$UDID" \
             CODE_SIGNING_ALLOWED=NO 2>&1 | tee "$RUNNER_TEMP/build.log"
 
-      # The package's auto-generated scheme picks up every test target.
+      # A package with several products gets one generated scheme for all of
+      # them, "<name>-Package"; it carries every test target.
       - name: Test DaedalusKit
         working-directory: ios/Packages/DaedalusKit
         env:
@@ -112,7 +113,7 @@ jobs:
         run: |
           set -o pipefail
           xcodebuild test \
-            -scheme DaedalusKit \
+            -scheme DaedalusKit-Package \
             -destination "id=$UDID" \
             -resultBundlePath "$GITHUB_WORKSPACE/build/Tests.xcresult" 2>&1 | tee "$RUNNER_TEMP/test.log"
 
