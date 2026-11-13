@@ -404,12 +404,21 @@ nonisolated struct MachineItem: Decodable, Sendable, Identifiable, Hashable {
     var restartPending: Bool
     var claude: ClaudeSummary?
     var battery: Battery?
+    /// The machine that reports this one: a watch's iPhone. Nil for the box and for every node.
+    var via: Via?
 
     var isBox: Bool { kind == "box" }
+    /// A watch: listed as its own machine, reported through its phone.
+    var isAccessory: Bool { kind == "accessory" }
+
+    struct Via: Decodable, Sendable, Hashable {
+        var id: String
+        var name: String
+    }
 
     enum CodingKeys: String, CodingKey {
         case id, kind, name, os, arch, agentVersion, state, connected, lastSeenAgo, light, model
-        case updateAvailable, restartPending, claude, battery
+        case updateAvailable, restartPending, claude, battery, via
         case isSelf = "self"
     }
 
@@ -439,6 +448,8 @@ nonisolated struct MachineDetail: Decodable, Sendable {
     var device: DeviceView?
     var osReleases: AppleOsReleases?
     var note: String?
+    /// `kind == "accessory"`: the watch's facts and its watchOS releases.
+    var accessory: DeviceView.Accessory?
 }
 
 nonisolated struct MachineSystem: Decodable, Sendable {

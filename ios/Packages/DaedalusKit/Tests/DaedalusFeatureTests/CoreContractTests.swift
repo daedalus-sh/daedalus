@@ -58,6 +58,19 @@ struct CoreContractTests {
         #expect(machines[1].battery?.percent == 81)
     }
 
+    @Test func aWatchIsListedAsItsOwnMachine() throws {
+        let json = #"""
+        {"machines":[{"id":"016d420edd9a540b.watch","kind":"accessory","name":"Apple Watch","os":"watchos","arch":"",
+          "agentVersion":null,"state":"approved","connected":null,"lastSeenAgo":120,"lastSeenAt":"2026-11-12T22:00:00Z",
+          "light":true,"self":false,"model":"Watch7,12","updateAvailable":null,"restartPending":false,"claude":null,
+          "battery":{"percent":30,"charging":false},"accessories":[],"via":{"id":"016d420edd9a540b","name":"iPhone"}}]}
+        """#
+        let watch = try #require(JSONDecoder().decode(Machines.self, from: Data(json.utf8)).machines.first)
+        #expect(watch.isAccessory)
+        #expect(watch.via?.name == "iPhone")
+        #expect(watch.connected == nil)
+    }
+
     @Test func theChangelogDecodesBothOfItsShapes() throws {
         let bare = #"{"notice":"n","content":{"container":"x","repo":null,"note":"no source"}}"#
         #expect(try JSONDecoder().decode(Untrusted<Changelog>.self, from: Data(bare.utf8)).content.note == "no source")

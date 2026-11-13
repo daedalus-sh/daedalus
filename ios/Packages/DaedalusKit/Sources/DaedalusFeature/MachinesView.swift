@@ -28,6 +28,7 @@ extension MachineItem {
     var symbol: String {
         if isBox { return "server.rack" }
         switch os {
+        case "watchos": return "applewatch"
         case "ios": return "iphone"
         case "ipados": return "ipad"
         case "macos": return "laptopcomputer"
@@ -39,6 +40,7 @@ extension MachineItem {
         switch os {
         case "ios": "iOS"
         case "ipados": "iPadOS"
+        case "watchos": "watchOS"
         case "macos": "macOS"
         case "windows": "Windows"
         case "linux": "Linux"
@@ -49,6 +51,7 @@ extension MachineItem {
     /// Where it stands, in a few words. A phone that is away is only away.
     var presence: String {
         if state == "revoked" { return "Revoked" }
+        if let via { return "Via \(via.name), " + Format.ago(seconds: lastSeenAgo) }
         if connected == true { return "Connected" }
         if connected == nil { return "Unknown" }
         return "Seen " + Format.ago(seconds: lastSeenAgo)
@@ -119,13 +122,14 @@ struct MachineDetailView: View {
                 identity(detail.machine)
                 if detail.kind == "box" {
                     boxParts(detail)
+                } else if let accessory = detail.accessory {
+                    accessoryParts(accessory)
                 } else {
                     if let note = detail.note {
                         Text(note).font(.callout).foregroundStyle(.secondary)
                     }
                     if let device = detail.device { deviceParts(device) }
                     if let releases = detail.osReleases { releaseParts(releases) }
-                    ForEach(detail.device?.accessories ?? []) { accessoryParts($0) }
                     if let system = detail.system, !detail.machine.light {
                         systemParts(system, spark: detail.cpuSpark ?? [])
                     }
@@ -143,7 +147,7 @@ struct MachineDetailView: View {
     private func identity(_ item: MachineItem) -> some View {
         Section {
             FactRow(title: "State", value: item.presence, level: item.level)
-            FactRow(title: "System", value: "\(item.osName) · \(item.arch)")
+            FactRow(title: "System", value: item.arch.isEmpty ? item.osName : "\(item.osName) · \(item.arch)")
             if let model = item.model { FactRow(title: "Model", value: model) }
             if let version = item.agentVersion {
                 FactRow(title: item.light ? "App" : "Agent", value: version)
@@ -248,9 +252,11 @@ struct MachineDetailView: View {
                       detail: "\(Format.bytes(free)) free of \(Format.bytes(total))")
             }
         } header: {
-            Label(accessory.name ?? "Watch", systemImage: "applewatch")
+            Text("Watch")
         } footer: {
-            if let at = accessory.at { Text("As its iPhone last reported, \(Format.ago(at)).") }
+            if let at = accessory.at {
+                Text("As its iPhone last reported, \(Format.ago(at)). The watch has no link of its own: its app hands this to the iPhone app.")
+            }
         }
         if let releases = accessory.osReleases { releaseParts(releases) }
     }
