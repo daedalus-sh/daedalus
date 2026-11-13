@@ -5,6 +5,8 @@ nonisolated enum JSONValue: Codable, Hashable, Sendable {
     case null
     case bool(Bool)
     case number(Double)
+    /// A whole number that must stay one on the wire (a byte count). Written only: a decoded number is `.number`.
+    case integer(Int64)
     case string(String)
     case array([JSONValue])
     case object([String: JSONValue])
@@ -32,6 +34,7 @@ nonisolated enum JSONValue: Codable, Hashable, Sendable {
         case .null: try c.encodeNil()
         case .bool(let b): try c.encode(b)
         case .number(let n): try c.encode(n)
+        case .integer(let n): try c.encode(n)
         case .string(let s): try c.encode(s)
         case .array(let a): try c.encode(a)
         case .object(let o): try c.encode(o)

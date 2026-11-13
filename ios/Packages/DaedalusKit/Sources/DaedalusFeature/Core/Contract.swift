@@ -494,10 +494,24 @@ nonisolated struct DeviceView: Decodable, Sendable {
     var storage: Storage?
     var memoryBytes: Double?
     var at: String
+    /// What the device reports beside itself: its watch. Absent from a box older than the addition.
+    var accessories: [Accessory]?
 
     struct Storage: Decodable, Sendable {
         var totalBytes: Double?
         var freeBytes: Double?
+    }
+
+    struct Accessory: Decodable, Sendable, Identifiable {
+        var kind: String
+        var name: String?
+        var model: String?
+        var osVersion: String?
+        var battery: MachineItem.Battery?
+        var storage: Storage?
+        var at: String?
+        var osReleases: AppleOsReleases?
+        var id: String { kind + (name ?? "") + (model ?? "") }
     }
 }
 

@@ -43,6 +43,11 @@ struct CoreAPITests {
         #expect(sent["publicKey"] == nil)
     }
 
+    @Test func aByteCountStaysAWholeNumberOnTheWire() throws {
+        let json = String(decoding: try JSONEncoder().encode(JSONValue.integer(64_000_000_000)), as: UTF8.self)
+        #expect(json == "64000000000")
+    }
+
     @Test func errorsAreReadFromTheEnvelope() {
         func body(_ code: String) -> Data { Data(#"{"error":{"code":"\#(code)","message":"why"}}"#.utf8) }
         #expect(API.error(status: 401, data: body("unauthorized")) == .unauthorized)

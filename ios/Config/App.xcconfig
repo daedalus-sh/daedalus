@@ -1,13 +1,9 @@
-// Single source of truth for app identity and versioning.
-// CI overrides CURRENT_PROJECT_VERSION with the workflow run number.
+// The iPhone and iPad app's identity. The team and the version are Shared.xcconfig's.
+#include "Shared.xcconfig"
 
-DEVELOPMENT_TEAM = H8M3SN9RDZ
 PRODUCT_BUNDLE_IDENTIFIER = com.santiagotoscanini.daedalus
 INFOPLIST_KEY_CFBundleDisplayName = Daedalus
 INFOPLIST_KEY_LSApplicationCategoryType = public.app-category.utilities
-
-MARKETING_VERSION = 0.1.0
-CURRENT_PROJECT_VERSION = 1
 
 IPHONEOS_DEPLOYMENT_TARGET = 27.0
 TARGETED_DEVICE_FAMILY = 1,2

@@ -1,3 +1,4 @@
+import DaedalusShared
 import Foundation
 import UIKit
 
@@ -31,13 +32,13 @@ struct DeviceFacts {
             "sampled_at": .string(ISO8601DateFormatter().string(from: .now)),
             "machine": ["manufacturer": "Apple", "model": .string(model),
                         "form": .string(os == "ipados" ? "tablet" : "phone")],
-            "memory": ["total_bytes": .number(Double(memoryBytes))],
+            "memory": ["total_bytes": .integer(Int64(clamping: memoryBytes))],
         ]
         if let osBuild { sample["os"] = ["build": .string(osBuild)] }
         if let total = storageTotalBytes, let free = storageFreeBytes {
             sample["disks"] = [[
-                "mount": "/", "name": .string(name), "total_bytes": .number(Double(total)),
-                "free_bytes": .number(Double(free)), "used_bytes": .number(Double(max(total - free, 0))),
+                "mount": "/", "name": .string(name), "total_bytes": .integer(total),
+                "free_bytes": .integer(free), "used_bytes": .integer(max(total - free, 0)),
             ]]
         }
         if let batteryPercent {
@@ -45,7 +46,26 @@ struct DeviceFacts {
             if let charging { battery["charging"] = .bool(charging) }
             sample["battery"] = .object(battery)
         }
+        if let watch = WatchBridge.shared.facts { sample["accessories"] = [Self.accessory(watch)] }
         return try? JSONEncoder().encode(JSONValue.object(sample))
+    }
+
+    /// The paired watch, as its app last read it: an accessory of this node, not a node of its own.
+    private static func accessory(_ watch: WatchFacts) -> JSONValue {
+        var entry: [String: JSONValue] = [
+            "kind": "watch", "name": .string(watch.name), "model": .string(watch.model),
+            "os_name": "watchOS", "os_version": .string(watch.osVersion),
+            "sampled_at": .string(ISO8601DateFormatter().string(from: watch.sampledAt)),
+        ]
+        if let build = watch.osBuild { entry["os_build"] = .string(build) }
+        if let percent = watch.batteryPercent {
+            var battery: [String: JSONValue] = ["percent": .number(percent), "low_power": .bool(watch.lowPower)]
+            if let charging = watch.charging { battery["charging"] = .bool(charging) }
+            entry["battery"] = .object(battery)
+        }
+        if let total = watch.storageTotalBytes { entry["storage_total_bytes"] = .integer(total) }
+        if let free = watch.storageFreeBytes { entry["storage_free_bytes"] = .integer(free) }
+        return .object(entry)
     }
 
     static func current() -> DeviceFacts {

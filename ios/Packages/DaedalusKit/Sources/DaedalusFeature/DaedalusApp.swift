@@ -37,6 +37,7 @@ struct AppRoot: View {
         }
         .tint(DS.brand)
         .animation(.default, value: box.isPaired)
+        .task { WatchBridge.shared.start() }
         .onOpenURL { url in
             guard let link = PairLink(url: url) else { return }
             if box.isPaired {

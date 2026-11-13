@@ -32,6 +32,16 @@ struct CoreContractTests {
         #expect(overview.updates.value?.behind == 3)
     }
 
+    @Test func theVerdictNamesWhatIsWrong() throws {
+        let fine = try JSONDecoder().decode(Overview.self, from: Data(Self.overview.utf8))
+        #expect(fine.troubles.isEmpty)
+        let broken = Self.overview
+            .replacingOccurrences(of: #""containers":{"total":96,"down":[]}"#, with: #""containers":{"total":96,"down":["sonarr"]}"#)
+            .replacingOccurrences(of: #""health":"ONLINE""#, with: #""health":"DEGRADED""#)
+        #expect(try JSONDecoder().decode(Overview.self, from: Data(broken.utf8)).troubles
+            == ["sonarr is down", "rpool is degraded"])
+    }
+
     @Test func aMachineKeepsItsSelfFlag() throws {
         let json = #"""
         {"machines":[{"id":"box","kind":"box","name":"s2-server","os":"linux","arch":"x86_64","agentVersion":"0.30.0",

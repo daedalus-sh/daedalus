@@ -8,17 +8,51 @@
 
 /* Begin PBXBuildFile section */
 		D1A000000000000000000010 /* AppFeature in Frameworks */ = {isa = PBXBuildFile; productRef = D1A000000000000000000011 /* AppFeature */; };
+		D1A000000000000000000110 /* WatchFeature in Frameworks */ = {isa = PBXBuildFile; productRef = D1A000000000000000000111 /* WatchFeature */; };
+		D1A000000000000000000113 /* DaedalusWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = D1A000000000000000000120 /* DaedalusWatch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		D1A000000000000000000114 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = D1A000000000000000000070 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = D1A000000000000000000160;
+			remoteInfo = DaedalusWatch;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		D1A000000000000000000163 /* Embed Watch Content */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
+			dstSubfolderSpec = 16;
+			files = (
+				D1A000000000000000000113 /* DaedalusWatch.app in Embed Watch Content */,
+			);
+			name = "Embed Watch Content";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		D1A000000000000000000020 /* Daedalus.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Daedalus.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		D1A000000000000000000021 /* App.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = App.xcconfig; sourceTree = "<group>"; };
+		D1A000000000000000000120 /* DaedalusWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DaedalusWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		D1A000000000000000000121 /* Watch.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Watch.xcconfig; sourceTree = "<group>"; };
+		D1A000000000000000000122 /* Shared.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Shared.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		D1A000000000000000000030 /* Daedalus */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = Daedalus;
+			sourceTree = "<group>";
+		};
+		D1A000000000000000000130 /* DaedalusWatch */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = DaedalusWatch;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -32,6 +66,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		D1A000000000000000000140 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D1A000000000000000000110 /* WatchFeature in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -39,6 +81,7 @@
 			isa = PBXGroup;
 			children = (
 				D1A000000000000000000030 /* Daedalus */,
+				D1A000000000000000000130 /* DaedalusWatch */,
 				D1A000000000000000000051 /* Config */,
 				D1A000000000000000000052 /* Products */,
 			);
@@ -48,6 +91,8 @@
 			isa = PBXGroup;
 			children = (
 				D1A000000000000000000021 /* App.xcconfig */,
+				D1A000000000000000000121 /* Watch.xcconfig */,
+				D1A000000000000000000122 /* Shared.xcconfig */,
 			);
 			path = Config;
 			sourceTree = "<group>";
@@ -56,6 +101,7 @@
 			isa = PBXGroup;
 			children = (
 				D1A000000000000000000020 /* Daedalus.app */,
+				D1A000000000000000000120 /* DaedalusWatch.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -70,10 +116,12 @@
 				D1A000000000000000000061 /* Sources */,
 				D1A000000000000000000040 /* Frameworks */,
 				D1A000000000000000000062 /* Resources */,
+				D1A000000000000000000163 /* Embed Watch Content */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				D1A000000000000000000115 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				D1A000000000000000000030 /* Daedalus */,
@@ -84,6 +132,29 @@
 			);
 			productName = Daedalus;
 			productReference = D1A000000000000000000020 /* Daedalus.app */;
+			productType = "com.apple.product-type.application";
+		};
+		D1A000000000000000000160 /* DaedalusWatch */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D1A000000000000000000190 /* Build configuration list for PBXNativeTarget "DaedalusWatch" */;
+			buildPhases = (
+				D1A000000000000000000161 /* Sources */,
+				D1A000000000000000000140 /* Frameworks */,
+				D1A000000000000000000162 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				D1A000000000000000000130 /* DaedalusWatch */,
+			);
+			name = DaedalusWatch;
+			packageProductDependencies = (
+				D1A000000000000000000111 /* WatchFeature */,
+			);
+			productName = DaedalusWatch;
+			productReference = D1A000000000000000000120 /* DaedalusWatch.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -97,6 +168,9 @@
 				LastUpgradeCheck = 2700;
 				TargetAttributes = {
 					D1A000000000000000000060 = {
+						CreatedOnToolsVersion = 27.0;
+					};
+					D1A000000000000000000160 = {
 						CreatedOnToolsVersion = 27.0;
 					};
 				};
@@ -119,12 +193,20 @@
 			projectRoot = "";
 			targets = (
 				D1A000000000000000000060 /* Daedalus */,
+				D1A000000000000000000160 /* DaedalusWatch */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		D1A000000000000000000062 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D1A000000000000000000162 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -141,7 +223,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		D1A000000000000000000161 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		D1A000000000000000000115 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = D1A000000000000000000160 /* DaedalusWatch */;
+			targetProxy = D1A000000000000000000114 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		D1A000000000000000000081 /* Debug */ = {
@@ -253,6 +350,54 @@
 			};
 			name = Release;
 		};
+		D1A000000000000000000191 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = D1A000000000000000000121 /* Watch.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		D1A000000000000000000192 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = D1A000000000000000000121 /* Watch.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -274,6 +419,15 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		D1A000000000000000000190 /* Build configuration list for PBXNativeTarget "DaedalusWatch" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D1A000000000000000000191 /* Debug */,
+				D1A000000000000000000192 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
@@ -287,6 +441,10 @@
 		D1A000000000000000000011 /* AppFeature */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = AppFeature;
+		};
+		D1A000000000000000000111 /* WatchFeature */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = WatchFeature;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

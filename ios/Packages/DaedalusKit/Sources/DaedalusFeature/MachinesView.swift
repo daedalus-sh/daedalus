@@ -125,6 +125,7 @@ struct MachineDetailView: View {
                     }
                     if let device = detail.device { deviceParts(device) }
                     if let releases = detail.osReleases { releaseParts(releases) }
+                    ForEach(detail.device?.accessories ?? []) { accessoryParts($0) }
                     if let system = detail.system, !detail.machine.light {
                         systemParts(system, spark: detail.cpuSpark ?? [])
                     }
@@ -227,8 +228,31 @@ struct MachineDetailView: View {
                 }
             }
         } header: {
-            Text(releases.os == "ipados" ? "iPadOS" : "iOS")
+            Text(releases.os == "ipados" ? "iPadOS" : releases.os == "watchos" ? "watchOS" : "iOS")
         }
+    }
+
+    /// The device's watch, as the device last reported it.
+    @ViewBuilder
+    private func accessoryParts(_ accessory: DeviceView.Accessory) -> some View {
+        Section {
+            if let model = accessory.model { FactRow(title: "Model", value: model) }
+            if let version = accessory.osVersion { FactRow(title: "watchOS", value: version) }
+            if let percent = accessory.battery?.percent {
+                FactRow(title: "Battery",
+                        value: Format.percent(percent) + (accessory.battery?.charging == true ? ", charging" : ""),
+                        level: percent < 20 && accessory.battery?.charging != true ? .warn : .ok)
+            }
+            if let storage = accessory.storage, let total = storage.totalBytes, let free = storage.freeBytes {
+                Meter(title: "Storage", fraction: Format.fraction(used: total - free, total: total),
+                      detail: "\(Format.bytes(free)) free of \(Format.bytes(total))")
+            }
+        } header: {
+            Label(accessory.name ?? "Watch", systemImage: "applewatch")
+        } footer: {
+            if let at = accessory.at { Text("As its iPhone last reported, \(Format.ago(at)).") }
+        }
+        if let releases = accessory.osReleases { releaseParts(releases) }
     }
 
     @ViewBuilder

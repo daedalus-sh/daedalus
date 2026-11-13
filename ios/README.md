@@ -30,6 +30,8 @@ agent itself is built from. The contract with the box is [`docs/api.md`](docs/ap
 | `Daedalus/`, `Daedalus.xcodeproj`, `Config/` | The thin app target: `@main`, assets, identity (`App.xcconfig`) |
 | `Packages/DaedalusKit/Sources/DaedalusFeature/Core/` | Pure logic, Foundation only: the API, the contract's types, the pair link |
 | `Packages/DaedalusKit/Sources/DaedalusFeature/` | `Box` (pairing, transport, calls), `NodeCore` (the Rust library), the screens |
+| `DaedalusWatch/`, `Sources/WatchFeature/` | The watch app: it reads the watch (battery, watchOS, model) and hands that to the iPhone app, which reports it to the box as an accessory of its own node. It also shows the box as the iPhone last saw it |
+| `Sources/DaedalusShared/` | What the two apps say to each other (WatchConnectivity's application context) |
 | `core/` | The Rust library and its C header (`include/daedalus_ios.h`) |
 | `scripts/build-core.sh` | Builds `core/` into `Packages/DaedalusKit/Frameworks/DaedalusCoreFFI.xcframework` |
 
@@ -70,5 +72,5 @@ Signing is cloud-managed with that key. By hand, once:
    platform iOS).
 3. On a Mac with the key's `.p8` in `~/Downloads`: `ios/scripts/setup-ci.sh` (it sets the three secrets
    and the variable). The key itself is made at <https://appstoreconnect.apple.com/access/integrations/api>.
-The version is `MARKETING_VERSION` in `Config/App.xcconfig`; the
+The version is `MARKETING_VERSION` in `Config/Shared.xcconfig`; the
 build number is the workflow's run number.

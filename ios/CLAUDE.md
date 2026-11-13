@@ -23,7 +23,14 @@
   main-actor code, and Swift 6 traps (`_dispatch_assert_queue_fail`) when it runs elsewhere. Nothing warns
   at compile time. `UIColor { traits in … }` providers, `Canvas` renderers and `Shape.path(in:)` are the
   known cases; `ThemeThreadingTests` guards the ones here.
+- The watch app (`DaedalusWatch/`, `Sources/WatchFeature`) is not a node: no key, no tunnel. It talks only to
+  the iPhone app, through `DaedalusShared`'s two Codable values, and must never depend on `DaedalusFeature`
+  or the Rust core (built for iOS only). `WatchFeature` is wrapped in `#if os(watchOS)` because the package's
+  tests build every target for iOS. WatchConnectivity delegates are `nonisolated` (its callbacks arrive off
+  the main thread).
+- The version and team are `Config/Shared.xcconfig`, shared by both apps: a watch app must carry its
+  iPhone app's version.
 - Model types that cross actors are `nonisolated struct …: Codable, Sendable`.
-- App identity and versioning live only in `Config/App.xcconfig`.
+- App identity lives only in `Config/App.xcconfig` and `Config/Watch.xcconfig`.
 - Test: `cd ios/Packages/DaedalusKit && xcodebuild test -scheme DaedalusKit -destination 'platform=iOS Simulator,name=<an available iPhone>'`
 - Build: `ios/scripts/build-core.sh`, then `cd ios && xcodebuild build -project Daedalus.xcodeproj -scheme Daedalus -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO`

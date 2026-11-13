@@ -1,3 +1,4 @@
+import DaedalusShared
 import SwiftUI
 
 /// The box at a glance: is anything wrong, and how hard is it working.
@@ -53,6 +54,11 @@ struct OverviewView: View {
             .navigationTitle(box.pairing?.boxName ?? "Overview")
             .refreshable { await feed.refresh() }
             .task(id: box.epoch) { await feed.poll(every: 15) }
+            // The watch shows the box as this screen last read it.
+            .onChange(of: feed.loadedAt) {
+                guard let overview = feed.value, let name = box.pairing?.boxName else { return }
+                WatchBridge.shared.send(BoxGlance(box: name, troubles: overview.troubles, at: .now))
+            }
         }
     }
 
@@ -93,38 +99,8 @@ struct Card<Content: View>: View {
 private struct VerdictCard: View {
     let overview: Overview
 
-    private var troubles: [String] {
-        var list: [String] = []
-        if let firing = overview.alerts.value?.firing, firing > 0 {
-            list.append(firing == 1 ? "1 alert firing" : "\(firing) alerts firing")
-        }
-        if let failing = overview.health.value?.failing, !failing.isEmpty {
-            list.append(failing.count == 1 ? "\(failing[0]) is not answering" : "\(failing.count) apps not answering")
-        }
-        if let host = overview.host.value {
-            if !host.containers.down.isEmpty {
-                list.append(host.containers.down.count == 1
-                    ? "\(host.containers.down[0]) is down" : "\(host.containers.down.count) containers down")
-            }
-            if !host.failedUnits.isEmpty {
-                list.append(host.failedUnits.count == 1 ? "1 failed unit" : "\(host.failedUnits.count) failed units")
-            }
-        }
-        if let storage = overview.storage.value {
-            for pool in storage.pools where pool.health != "ONLINE" {
-                list.append("\(pool.name) is \(pool.health.lowercased())")
-            }
-            if storage.disks.contains(where: { $0.passed == false }) { list.append("a drive failed SMART") }
-        }
-        if let jobs = overview.jobs.value?.trouble, !jobs.isEmpty {
-            list.append(jobs.count == 1 ? "1 job in trouble" : "\(jobs.count) jobs in trouble")
-        }
-        if overview.apply.value?.rebootPending == true { list.append("a reboot is pending") }
-        return list
-    }
-
     var body: some View {
-        let troubles = troubles
+        let troubles = overview.troubles
         let level: Level = troubles.isEmpty ? .ok : .bad
         HStack(alignment: .top, spacing: 14) {
             Image(systemName: level.symbol)
