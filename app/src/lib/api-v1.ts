@@ -263,7 +263,7 @@ export type ClaudeSummary = {
 
 export type BatteryView = { percent: number | null; charging: boolean | null }
 
-/** What is paired with a phone and is no machine itself: its watch, as the phone last reported it. */
+/** A phone's watch as the phone last reported it: a line of the phone, beside its own entry in the list. */
 export type AccessoryItem = {
   kind: 'watch'
   /** What its owner called it; null when the phone did not say. */
@@ -272,9 +272,10 @@ export type AccessoryItem = {
 }
 
 export type MachineItem = {
-  /** `box`, or a node id (16 hex). */
+  /** `box`, a node id (16 hex), or an accessory's: its phone's node id, then `.watch`. */
   id: string
-  kind: 'box' | 'node'
+  /** 'accessory': a watch, listed as its own machine and reported through its phone. */
+  kind: 'box' | 'node' | 'accessory'
   name: string
   os: string
   arch: string
@@ -298,6 +299,8 @@ export type MachineItem = {
   battery: BatteryView | null
   /** A phone's paired watch; empty for every other machine and for a phone without one. */
   accessories: AccessoryItem[]
+  /** The machine that reports this one; null for the box and for every node. */
+  via: { id: string; name: string } | null
 }
 
 export type Machines = { machines: MachineItem[] }
@@ -358,7 +361,7 @@ export type MachineSystem = {
   osRebootPending: boolean | null
 }
 
-/** A phone's watch: what the phone last said about it, and what Apple has published past its watchOS. */
+/** A watch: what its phone last said about it, and what Apple has published past its watchOS. */
 export type AccessoryView = AccessoryItem & {
   /** The device identifier: "Watch7,5". */
   model: string | null
@@ -408,6 +411,13 @@ export type MachineDetail =
       osReleases: AppleOsReleases | null
       /** Why there is no `system`, in a line; null when there is one. */
       note: string | null
+    }
+  | {
+      machine: MachineItem
+      kind: 'accessory'
+      /** The watch's facts and its watchOS releases. */
+      accessory: AccessoryView
+      via: { id: string; name: string }
     }
 
 export type MachineCommand = 'check_update' | 'claude_update' | 'claude_restart'

@@ -497,10 +497,25 @@ watchOS version and build, battery, storage, and when the watch read
 them). The controller keeps at most four per sample, with the phone's
 document, and the box keeps them in the phone's row with the rest
 (`nodes.device.accessories`); a sample lists them whole, so one without the
-watch is a phone without one. The watch is drawn under its phone — a Watch
-board on the phone's Device tab with Apple's watchOS releases beside it, a
-line of the phone's row on Settings › Machines, `accessories` on the
-phone in `/api/v1` — and never in the machine list or the System picker.
+watch is a phone without one.
+
+**It is drawn as a machine all the same**, and only drawn
+(`app/src/lib/agent/accessory.ts`). Its id is its phone's with `.watch`
+after it — one watch per phone, the first a sample lists — and it exists
+exactly while the phone is approved and its kept facts list a watch. The
+three places a machine is shown derive it from the phone's row they already
+hold: Settings › Machines gives it a row under its phone (what it is, "via
+<phone> · reported N ago", and its display name, the one thing the box holds
+about it: `watchName` in the phone's `policy`, written by
+`setAccessoryName` with no sync after it), the System picker gives it an
+entry and a page (Watch and watchOS, `lib/dashboard/accessory-system.ts`),
+and `/api/v1` lists it after its phone (`kind: 'accessory'`, `via`) and
+answers `/machines/<phone id>.watch`. Nothing that acts on machines can come
+by it — the readers of the `nodes` table (the desired set, the providers and
+the gateway, the DHCP lines, `site/nodes.json`, the runners, the metrics
+targets, santree) return rows, and a watch has none; a test pins the files
+that import `accessory.ts`. It takes no command, has no policy and no
+Revoke: it leaves with its phone.
 
 **It joins by scanning a code** (`app/src/host/pair.ts`). "Add a phone or
 tablet" makes a wg-easy client confined to two ports and a single-use ticket,

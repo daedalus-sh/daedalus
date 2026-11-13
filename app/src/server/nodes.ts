@@ -1,3 +1,4 @@
+import { accessoryNamePatch } from '../lib/agent/accessory'
 import { NODE_COMMANDS, ROTATION_GRACE, ROTATION_GRACES } from '../lib/agent/policy'
 import { nodePolicyPatch } from '../lib/agent/policy-patch'
 import { asValidator, is, literal, obj, str, withMessage } from '../lib/contract/decode'
@@ -131,6 +132,18 @@ export const saveNodePolicyFn = adminFn
         context.actor,
       ),
     }
+  })
+
+/**
+ * Name a phone's watch: the one thing about it the box holds (core/nodes.ts
+ * `setAccessoryName`). Its own function, not a policy patch: the watch has no
+ * policy, and nothing is sent to any machine.
+ */
+export const saveAccessoryNameFn = adminFn
+  .validator(accessoryNamePatch)
+  .handler(async ({ data, context }) => {
+    const { setAccessoryName } = await import('../core/nodes')
+    return setAccessoryName(data.phone, data.name, context.actor)
   })
 
 /**

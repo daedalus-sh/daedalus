@@ -36,7 +36,8 @@ export { BoxHead, MachineHead } from './shared'
 //   connected only while its app is open and reports a handful of facts, so
 //   its row is two tabs — Device, under Host's id so the picker keeps its
 //   place, and iOS or iPadOS, what Apple has shipped since. No Claude and no
-//   Chromium: neither runs there.
+//   Chromium: neither runs there. Its watch is no node, and is drawn as a
+//   machine all the same (./watch.tsx): Watch and watchOS.
 //
 // The box itself is not a node: its row, with pools, backups and the browser
 // lab, is modules/system/manifest.ts.
@@ -130,7 +131,17 @@ const IPADOS_TABS: readonly NodeTabSpec[] = [
   { id: 'ios', label: 'iPadOS', boardSpans: [4, 8, 12] },
 ]
 
+// A phone's watch, where the picker shows it as a machine (./watch.tsx): the
+// phone's two tabs under the same ids, so the picker keeps its place between
+// a phone and its watch. `watchos` is no node's OS: the route names it for a
+// watch's id.
+const WATCH_TABS: readonly NodeTabSpec[] = [
+  { id: 'host', label: 'Watch', boardSpans: [4, 4, 4] },
+  { id: 'ios', label: 'watchOS', boardSpans: [4, 8] },
+]
+
 export function nodeTabsFor(os: string): readonly NodeTabSpec[] {
+  if (os === 'watchos') return WATCH_TABS
   if (isLightOs(os)) return os === 'ipados' ? IPADOS_TABS : IOS_TABS
   return os === 'windows' ? WINDOWS_TABS : os === 'macos' ? MACOS_TABS : OTHER_TABS
 }
@@ -162,6 +173,7 @@ const NEAREST: Record<string, Record<string, NodeTabId>> = {
   linux: { ios: 'updates' },
   ios: LIGHT_NEAREST,
   ipados: LIGHT_NEAREST,
+  watchos: LIGHT_NEAREST,
 }
 
 export function resolveNodeTab(os: string, tab: string | undefined): NodeTabId {

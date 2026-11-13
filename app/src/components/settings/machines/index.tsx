@@ -1,4 +1,6 @@
 import { useSearch } from '@tanstack/react-router'
+import { Fragment } from 'react'
+import { accessoryOf } from '../../../lib/agent/accessory'
 import type { MachinesData } from '../../../lib/dashboard/machines'
 import { Ago } from '../../ago'
 import { BoxProvider, GatewaySync } from '../provider-models'
@@ -9,11 +11,13 @@ import { BACK } from './machine-cells'
 import { MachineRow, MachinesHead, PendingRow } from './machine-section'
 import { RotateKey, RotationState } from './rotate'
 import { SessionHost, SessionHostRestart } from './session-host'
+import { WatchRow } from './watch'
 
 // Settings › Machines — the other computers that run the agent: what each
 // one is, whether the box trusts it, and what the box asks of it. One card
 // per machine, and the whole story on it: the decision about a machine and
-// the policy sent to it are read together, so they sit together.
+// the policy sent to it are read together, so they sit together. A phone's
+// watch has a row too (./watch.tsx), though it is no machine of the box.
 //
 // Every machine keeps one link to the controller — the agent on this box —
 // and the page reads them all from it (lib/dashboard/machines.ts). A key
@@ -40,6 +44,10 @@ export function Machines({ d }: { d: MachinesData }) {
   const c = d.controller
   const sync = d.sync
   const waiting = d.machines.filter((m) => m.node === null).length
+  // A phone's watch is a row of its own, under its phone: drawn here from the
+  // phone's row, never a machine the list itself holds (lib/agent/accessory.ts).
+  const rows = d.machines.map((m) => ({ m, watch: m.node === null ? null : accessoryOf(m.node) }))
+  const count = rows.length + rows.filter((r) => r.watch !== null).length
   return (
     <div className={SECTIONS}>
       <Section
@@ -48,7 +56,7 @@ export function Machines({ d }: { d: MachinesData }) {
         aside={
           d.machines.length === 0 ? undefined : (
             <>
-              {String(d.machines.length)} machine{d.machines.length === 1 ? '' : 's'}
+              {String(count)} machine{count === 1 ? '' : 's'}
               {waiting > 0 && ` · ${String(waiting)} waiting`}
             </>
           )
@@ -65,7 +73,7 @@ export function Machines({ d }: { d: MachinesData }) {
           ) : (
             <ul className="m-0 list-none p-0">
               <MachinesHead />
-              {d.machines.map((m) =>
+              {rows.map(({ m, watch }) =>
                 m.node === null ? (
                   <PendingRow
                     key={m.pending?.id ?? ''}
@@ -73,13 +81,15 @@ export function Machines({ d }: { d: MachinesData }) {
                     controllerFingerprint={c.reachable ? c.fingerprint : null}
                   />
                 ) : (
-                  <MachineRow
-                    key={m.node.id}
-                    m={m}
-                    lanDomain={d.lanDomain}
-                    open={search.node === m.node.id || d.machines.length === 1}
-                    askSantree={search.santree === 'on' && search.node === m.node.id}
-                  />
+                  <Fragment key={m.node.id}>
+                    <MachineRow
+                      m={m}
+                      lanDomain={d.lanDomain}
+                      open={search.node === m.node.id || count === 1}
+                      askSantree={search.santree === 'on' && search.node === m.node.id}
+                    />
+                    {watch !== null && <WatchRow w={watch} open={search.node === watch.id} />}
+                  </Fragment>
                 ),
               )}
             </ul>

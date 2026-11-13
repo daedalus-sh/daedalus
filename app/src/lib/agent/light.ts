@@ -14,7 +14,8 @@ import type { NodeDetail, Telemetry } from '../../host/controller/generated'
 // An accessory is not a node at all: an Apple Watch has no key and no link.
 // Its watchOS app hands its facts to the iPhone app, which reports them
 // inside its own telemetry sample (`Telemetry.accessories`), and the box
-// keeps them with the phone's.
+// keeps them with the phone's. Where machines are drawn it is shown as one
+// of its own (./accessory.ts); nothing here or below changes for that.
 //
 // Pure: the pages and the tests import it.
 

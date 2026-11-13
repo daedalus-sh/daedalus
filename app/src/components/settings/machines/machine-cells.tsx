@@ -26,7 +26,9 @@ export function OsMark({ os }: { os: string }) {
         ? { src: '/icon-apple.svg', invert: true }
         : os === 'linux'
           ? { src: '/icon-linux.svg', invert: true }
-          : null
+          : os === 'watchos'
+            ? { src: '/icon-watch.svg', invert: true }
+            : null
   if (mark === null) return <span aria-hidden="true" className="size-4 flex-none" />
   return (
     <img
@@ -46,6 +48,7 @@ export function osName(os: string | null | undefined): string {
   if (os === 'linux') return 'Linux'
   if (os === 'ios') return 'iOS'
   if (os === 'ipados') return 'iPadOS'
+  if (os === 'watchos') return 'watchOS'
   return os ? os.charAt(0).toUpperCase() + os.slice(1) : 'unknown OS'
 }
 

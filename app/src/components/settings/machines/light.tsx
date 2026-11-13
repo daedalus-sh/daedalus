@@ -1,3 +1,5 @@
+import { Link } from '@tanstack/react-router'
+import { accessoryOf } from '../../../lib/agent/accessory'
 import { lightKind } from '../../../lib/agent/light'
 import { cn } from '../../../lib/cn'
 import { bytes, pct } from '../../../lib/format'
@@ -48,6 +50,7 @@ export function lightFacts(n: NodeRow, osLabel: string): Fact[] {
   const none = <span className={ASIDE}>—</span>
   const battery = d?.battery ?? null
   const storage = d?.storage ?? null
+  const watch = accessoryOf(n)
   return [
     {
       k: lightKind(n.os),
@@ -88,19 +91,24 @@ export function lightFacts(n: NodeRow, osLabel: string): Fact[] {
           <span className="tabular-nums">{bytes(d.memoryBytes)}</span>
         ),
     },
-    // Its watch, when it reported one: no machine of its own, a line of the phone's.
-    ...(d?.accessories ?? []).map((a, i) => ({
-      k: i === 0 ? 'Watch' : `Watch ${String(i + 1)}`,
-      v: (
-        <span className="tabular-nums">
-          {a.name ?? a.model ?? 'Apple Watch'}
-          <span className={ASIDE}>
-            {a.osVersion !== null && ` · watchOS ${a.osVersion}`}
-            {a.battery !== null && a.battery.percent !== null && ` · ${pct(a.battery.percent)}`}
-          </span>
-        </span>
-      ),
-    })),
+    // Its watch has the row under this one (./watch.tsx); here, only the way there.
+    ...(watch === null
+      ? []
+      : [
+          {
+            k: 'Watch',
+            v: (
+              <Link
+                to="/settings"
+                search={{ tab: 'machines', node: watch.id }}
+                replace
+                resetScroll={false}
+              >
+                {watch.name}
+              </Link>
+            ),
+          },
+        ]),
     { k: 'Link', v: <LightLink n={n} /> },
     {
       k: 'Facts read',

@@ -2,9 +2,11 @@
 // dots, the placeholder while boards stream in, and a node's head strip.
 
 import { useLoaderData } from '@tanstack/react-router'
+import type { AccessorySystemData } from '../lib/dashboard/accessory-system'
 import type { NodeSystemData } from '../lib/dashboard/node-system'
 import { isDotted, nixModulesOf, type PageSpec } from '../lib/modules/manifest'
 import { MachineHead } from '../modules/system/view/node'
+import { WatchHead } from '../modules/system/view/node/watch'
 import type { TabStatus } from '../server/tab-status'
 import { StateDot } from './controls'
 import { GuardedAwait } from './error'
@@ -134,6 +136,26 @@ export function NodeHead({
       fallback={<HeadStripSkeleton />}
     >
       {(d) => (d === null ? null : <MachineHead d={d} />)}
+    </GuardedAwait>
+  )
+}
+
+/** A watch's head strip, in the same slot: its phone answers for it. */
+export function AccessoryHead({
+  promise,
+  resetKey,
+}: {
+  promise: Promise<AccessorySystemData | null>
+  resetKey: string
+}) {
+  return (
+    <GuardedAwait
+      resetKey={resetKey}
+      slot="head"
+      promise={promise}
+      fallback={<HeadStripSkeleton />}
+    >
+      {(d) => (d === null ? null : <WatchHead d={d} />)}
     </GuardedAwait>
   )
 }

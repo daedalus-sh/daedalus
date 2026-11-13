@@ -1,5 +1,5 @@
 import { asValidator, obj, withMessage } from '../lib/contract/decode'
-import { flagField, nodeIdField } from '../lib/contract/fields'
+import { accessoryIdField, flagField, nodeIdField } from '../lib/contract/fields'
 import { readFn } from './fn'
 
 // The machine picker's list and a node's System page. Read-only.
@@ -20,7 +20,6 @@ export const fetchNodeSystemFn = readFn
           browsers: flagField,
           macos: flagField,
           ios: flagField,
-          watch: flagField,
         }),
         'expected a node id',
       ),
@@ -33,8 +32,19 @@ export const fetchNodeSystemFn = readFn
       browsers: data.browsers,
       macos: data.macos,
       ios: data.ios,
-      watch: data.watch,
     })
+  })
+
+/** A phone's watch as the System page draws it (lib/dashboard/accessory-system.ts). */
+export const fetchAccessorySystemFn = readFn
+  .validator(
+    asValidator(
+      withMessage(obj({ id: accessoryIdField, releases: flagField }), 'expected a watch id'),
+    ),
+  )
+  .handler(async ({ data, context }) => {
+    const { loadAccessorySystem } = await import('../lib/dashboard/accessory-system')
+    return loadAccessorySystem(await context.ctx(), data.id, { releases: data.releases })
   })
 
 /** The strip above the box's own System tabs: its release, kernel and board. */

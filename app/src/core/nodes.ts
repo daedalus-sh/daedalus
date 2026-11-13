@@ -16,6 +16,7 @@ import { fingerprintOf, releaseTunnel } from '../host/enroll'
 import { requestGatewaySync } from '../host/gateway-sync'
 import type { NodePolicy } from '../host/schema'
 import { readSessionHost } from '../host/session-host'
+import { watchOf } from '../lib/agent/accessory'
 import {
   deviceFactsFrom,
   isLightOs,
@@ -117,6 +118,34 @@ export async function applyNodePolicyRequest(
   console.info(`nodes: ${id} (${name}) set ${said} from the machine`)
   requestDesiredSync(ctx)
   return true
+}
+
+/**
+ * Name a phone's watch (lib/agent/accessory.ts), recorded under `by`: one key
+ * of the phone's row that only the pages read, so nothing follows the write —
+ * no desired set, no DHCP lines, no gateway. An empty name goes back to the
+ * one the watch reports. Only an approved phone whose kept facts list a watch
+ * has one to name.
+ */
+export async function setAccessoryName(
+  phoneId: string,
+  name: string,
+  by: string,
+): Promise<Result<true>> {
+  const n = await nodeById(phoneId)
+  if (
+    n === undefined ||
+    n.state !== 'approved' ||
+    !isLightOs(n.os) ||
+    watchOf(keptDeviceFacts(n.device)) === null
+  ) {
+    return { ok: false, reason: 'No such watch: its iPhone reports none.' }
+  }
+  const patch: PolicyPatch =
+    name === '' ? { set: {}, unset: ['watchName'] } : { set: { watchName: name }, unset: [] }
+  return (await writePolicy(phoneId, patch, by))
+    ? { ok: true, value: true }
+    : { ok: false, reason: 'No such watch: its iPhone is gone.' }
 }
 
 /** How a santree grant ended (`grantSantree`). */

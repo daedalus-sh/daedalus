@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import type { Ctx } from '../../../core/ctx'
+import { isAccessoryId } from '../../../lib/agent/accessory'
 import { isLightOs } from '../../../lib/agent/light'
 import { NODE_COMMANDS } from '../../../lib/agent/policy'
 import type { ApiErrorBody, ApiErrorCode } from '../../../lib/api-v1'
@@ -84,7 +85,9 @@ const nodeId = z.string().regex(/^[0-9a-f]{16}$/, 'not a machine id')
 /** `box`, null, or a node id: null and `box` both mean the box. */
 const machine = z.union([z.literal(BOX), nodeId]).nullable()
 const target = z.strictObject({ container, toTag: tag.optional() })
-const machineParam = z.strictObject({ id: z.union([z.literal(BOX), nodeId]) })
+/** A watch's id: its phone's, then `.watch` (lib/agent/accessory.ts). */
+const accessoryId = z.string().refine(isAccessoryId, 'not a machine id')
+const machineParam = z.strictObject({ id: z.union([z.literal(BOX), nodeId, accessoryId]) })
 
 const first = (issue: z.core.$ZodIssue): string =>
   issue.path.length === 0 ? issue.message : `${issue.path.join('.')}: ${issue.message}`
@@ -357,6 +360,9 @@ export const ROUTES: readonly Route[] = [
       const id = params.id ?? ''
       if (id === BOX) {
         fail('refused', 'The box takes no machine commands: its updates are under /updates.')
+      }
+      if (isAccessoryId(id)) {
+        fail('refused', 'A watch takes no commands from the box: its iPhone reports it.')
       }
       const { sendNodeCommand } = await import('../../../core/nodes')
       const command = NODE_COMMANDS.find((c) => c === body.command)

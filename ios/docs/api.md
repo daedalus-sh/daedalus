@@ -699,17 +699,19 @@ type ApplyDiscarded = {
 ### `GET /api/v1/machines`
 
 The box first, then every machine the box has decided about (approved or
-revoked), in the order they joined.
+revoked), in the order they joined. A phone's watch is listed as a machine of
+its own, directly after its phone (`kind: 'accessory'`, below).
 
 ```ts
 type Machines = { machines: MachineItem[] }
 
 type MachineItem = {
-  /** "box", or a node id. */
+  /** "box", a node id (16 hex), or an accessory's: its phone's node id, then ".watch". */
   id: string
-  kind: 'box' | 'node'
+  /** 'accessory': a watch, listed as its own machine and reported through its phone. */
+  kind: 'box' | 'node' | 'accessory'
   name: string
-  /** "linux" | "macos" | "windows" | "ios" | "ipados" */
+  /** "linux" | "macos" | "windows" | "ios" | "ipados", and "watchos" for an accessory */
   os: string
   arch: string
   /** The agent's version: the controller's on the box, the native app's on a phone. */
@@ -735,9 +737,11 @@ type MachineItem = {
   battery: { percent: number | null; charging: boolean | null } | null
   /** A phone's paired watch, as the phone last reported it; empty for every other machine and for a phone without one. */
   accessories: AccessoryItem[]
+  /** The machine that reports this one; null for the box and for every node. */
+  via: { id: string; name: string } | null
 }
 
-/** What is paired with a phone and is no machine itself. It has no id, no link and no page of its own. */
+/** A phone's watch as a line of the phone's own item. The same watch is also the next item of the list. */
 type AccessoryItem = {
   kind: 'watch'
   /** What its owner called it ("Santiago’s Apple Watch"); null when the phone did not say. */
@@ -758,9 +762,36 @@ type ClaudeSummary = {
 }
 ```
 
+**An accessory's item.** A watch has no key, no link and no agent: the box
+knows it only through its phone, and lists it as a machine so the app can
+give it a row and a page. Its item, directly after its phone's:
+
+| field | value |
+|---|---|
+| `id` | `<phone id>.watch`. One watch per phone. |
+| `kind` | `'accessory'` |
+| `name` | Its display name: the one set on Settings › Machines, else the name the watch reports, else `"Apple Watch"`. |
+| `os` | `"watchos"` |
+| `arch` | `""` |
+| `agentVersion` | `null` |
+| `state` | Its phone's. It is listed only while its phone is approved and reports a watch, so `'approved'`. |
+| `connected` | `null`: the box holds no link to it. |
+| `lastSeenAgo`, `lastSeenAt` | From the watch's own reading time (`AccessoryView.at`), not its phone's. |
+| `light` | `true`: show "as of", never a fault. |
+| `self` | `false` |
+| `model` | The watch's device identifier (`"Watch7,5"`), or `null`. |
+| `updateAvailable`, `restartPending`, `claude` | `null`, `false`, `null` |
+| `battery` | The watch's. |
+| `accessories` | `[]` |
+| `via` | `{ id, name }` of its phone. |
+
+The phone's own `accessories` (and its detail's `device.accessories`) still
+carry the watch, as before.
+
 ### `GET /api/v1/machines/:id`
 
-`:id` is `box` or a node id. `404 not_found` for an unknown one.
+`:id` is `box`, a node id, or an accessory's id (`<phone id>.watch`).
+`404 not_found` for an unknown one, and for a phone that has no watch.
 
 ```ts
 type MachineDetail =
@@ -784,6 +815,13 @@ type MachineDetail =
       osReleases: AppleOsReleases | null
       /** Why there is no `system`, in a line; null when there is one. */
       note: string | null
+    }
+  | {
+      machine: MachineItem
+      kind: 'accessory'
+      /** The watch's facts and its watchOS releases (the existing AccessoryView). */
+      accessory: AccessoryView
+      via: { id: string; name: string }
     }
 
 /** What a machine's agent last reported, condensed. */
@@ -836,7 +874,7 @@ type DeviceView = {
   at: string
 }
 
-/** A phone's watch: what the phone last said about it, and what Apple has published past its watchOS. */
+/** A watch: what its phone last said about it, and what Apple has published past its watchOS. `name` is the reported one, not the display name. */
 type AccessoryView = AccessoryItem & {
   /** The device identifier: "Watch7,5". */
   model: string | null
@@ -884,13 +922,15 @@ type AppleOsReleases = {
 it from the node's telemetry once a minute while the app is connected. The
 app knows its own device better than this answer does.
 
-A watch is not a machine: it never appears in `machines` and has no
-`/machines/:id`. The iPhone app receives its facts from the watchOS app and
-reports them in its own telemetry sample (`accessories`, in
-`ios/core/include/daedalus_ios.h`); the box keeps them with the phone's and
-answers them here. Every sample replaces the list whole: a sample without
-the watch is a phone without one. `at` is the watch's own reading time, so
-show the watch "as of" it.
+A watch is listed as a machine and is technically none: no key, no link, no
+token, nothing the box can send it. The iPhone app receives its facts from
+the watchOS app and reports them in its own telemetry sample (`accessories`,
+in `ios/core/include/daedalus_ios.h`); the box keeps them with the phone's
+and answers them here and under the watch's own id. Every sample replaces the
+list whole: a sample without the watch is a phone without one, and its
+`<phone id>.watch` is then a `404`. A phone revoked or forgotten takes its
+watch with it. `at` is the watch's own reading time, so show the watch "as
+of" it.
 
 ### `POST /api/v1/machines/:id/command`
 
@@ -910,8 +950,9 @@ type CommandSent = {
 `check_update`: its updater looks for an agent release now. `claude_update`:
 it updates Claude Code, interrupting nothing. `claude_restart`: it restarts
 Remote Control, which ends every session there (they resume by themselves).
-`409 refused` for `box` (its updates are under [Updates](#updates)) and for a
-phone or tablet. `404 not_found` for an unknown machine.
+`409 refused` for `box` (its updates are under [Updates](#updates)), for a
+phone or tablet, and for an accessory (`<phone id>.watch`). `404 not_found`
+for an unknown machine.
 
 ---
 
@@ -1090,3 +1131,12 @@ Append only. A breaking change is a new `/api/v2`, never an edit to v1.
   `DeviceView.accessories` (`AccessoryView[]`: its facts and its watchOS
   `osReleases`), and `AppleOsReleases.os` gains `'watchos'` on a watch's list.
   Nothing existing changed or moved.
+- **2026-11-12**, v1 addition: an accessory is listed as its own machine.
+  `GET /machines` lists a phone's watch directly after its phone, as a
+  `MachineItem` with `id: "<phone id>.watch"`, `kind: 'accessory'` (a new
+  value of `kind`), `os: "watchos"` and the new field `via` (`{ id, name }`
+  of its phone; `null` on every other item). `GET /machines/<phone id>.watch`
+  answers a third `MachineDetail` variant, `kind: 'accessory'` with
+  `accessory: AccessoryView` and `via`; `404` when the phone has no watch.
+  `POST /machines/<phone id>.watch/command` is `409 refused`. A phone's
+  `accessories` and `device.accessories` are unchanged.

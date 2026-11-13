@@ -116,7 +116,7 @@ export const Route = createFileRoute('/settings')({
     // Machines tab opens that machine's confirmation. A node id and the one
     // word; anything else is dropped.
     node:
-      typeof search.node === 'string' && /^[0-9a-f]{16}$/.test(search.node)
+      typeof search.node === 'string' && /^[0-9a-f]{16}(?:\.watch)?$/.test(search.node)
         ? search.node
         : undefined,
     santree: search.santree === 'on' ? 'on' : undefined,

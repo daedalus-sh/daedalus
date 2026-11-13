@@ -1,5 +1,5 @@
 import { createFileRoute, notFound } from '@tanstack/react-router'
-import { BoardsPlaceholder, NodeHead, TabNav } from '../components/category-nav'
+import { AccessoryHead, BoardsPlaceholder, NodeHead, TabNav } from '../components/category-nav'
 import { GuardedAwait } from '../components/error'
 import { MachinePicker } from '../components/machine-picker'
 import { ModuleBoards } from '../components/modules/boards'
@@ -7,6 +7,7 @@ import { PageHead } from '../components/page'
 import { BoardsSkeleton, ServiceHeadSkeleton, StripSkeleton } from '../components/skeleton'
 import { TabBar } from '../components/tabs'
 import { EMPTY } from '../components/tokens'
+import { accessoryOf, isAccessoryId } from '../lib/agent/accessory'
 import { isLightOs } from '../lib/agent/light'
 import { known } from '../lib/known'
 import { isDotted, resolveTabOf } from '../lib/modules/manifest'
@@ -19,8 +20,14 @@ import {
   resolveNodeTab,
 } from '../modules/system/view/node'
 import { NodeClaudeView } from '../modules/system/view/node/claude'
+import { WatchSystemView } from '../modules/system/view/node/watch'
 import { fetchNodeClaudeFn } from '../server/claude'
-import { fetchBoxHeadFn, fetchMachineNodesFn, fetchNodeSystemFn } from '../server/machines'
+import {
+  fetchAccessorySystemFn,
+  fetchBoxHeadFn,
+  fetchMachineNodesFn,
+  fetchNodeSystemFn,
+} from '../server/machines'
 import { fetchModuleBoards } from '../server/modules'
 import { fetchTabStatus } from '../server/tab-status'
 
@@ -48,7 +55,8 @@ import { fetchTabStatus } from '../server/tab-status'
 // fetched.
 
 /**
- * A machine, as either picker names one: a node's id, or `box` for this
+ * A machine, as either picker names one: a node's id, a phone's watch (its
+ * phone's id, then `.watch` — lib/agent/accessory.ts), or `box` for this
  * one — optionally with a provider kind after a colon, because AI's picker
  * is over provider rows and one machine may run more than one model server.
  *
@@ -57,7 +65,7 @@ import { fetchTabStatus } from '../server/tab-status'
  * undefined, the tab falls back to its default machine, and the click
  * appears to do nothing.
  */
-const MACHINE = /^(?:[0-9a-f]{16}|box)(?::[a-z][a-z0-9-]{0,31})?$/
+const MACHINE = /^(?:[0-9a-f]{16}(?:\.watch)?|box)(?::[a-z][a-z0-9-]{0,31})?$/
 
 /** The machine half, for the readers that want a node id and not a row. */
 const machineOf = (v: string | undefined): string | undefined => v?.split(':')[0]
@@ -96,10 +104,22 @@ export const Route = createFileRoute('/c/$category')({
     // what the picker draws, since "last seen" moves on every read.
     const nodes = picker
       ? await known('machines', fetchMachineNodesFn, (ns) =>
-          ns.map((n) => [n.id, n.name, n.os, n.state, n.claude?.sessions ?? 0].join()).join(';'),
+          ns
+            .map((n) =>
+              // Its watch too: the picker draws one as an entry of its own.
+              [n.id, n.name, n.os, n.state, n.claude?.sessions ?? 0, accessoryOf(n)?.name].join(),
+            )
+            .join(';'),
         )
       : []
-    const nodeOs = machine === null ? null : (nodes.find((n) => n.id === machine)?.os ?? 'windows')
+    // A watch is no node: its id names its phone's row, and its tab row is its own.
+    const watch = machine !== null && isAccessoryId(machine)
+    const nodeOs =
+      machine === null
+        ? null
+        : watch
+          ? 'watchos'
+          : (nodes.find((n) => n.id === machine)?.os ?? 'windows')
     // The node's tabs share the box's ids where the subject is the same, so
     // `?tab=memory` names the memory of whichever machine is picked; an id
     // this machine lacks opens the nearest subject it has.
@@ -119,7 +139,7 @@ export const Route = createFileRoute('/c/$category')({
       // as a page that had not finished. The Claude tab adds its report (the
       // tray's picture of the remote-control server) for its boards.
       node:
-        machine === null
+        machine === null || watch
           ? null
           : fetchNodeSystemFn({
               data: {
@@ -130,10 +150,14 @@ export const Route = createFileRoute('/c/$category')({
                 // A phone's list is read from what it last said it runs, so
                 // it is asked for whether or not the phone is connected.
                 ios: isLightOs(nodeOs) && nodeTab === 'ios',
-                // Its watch's list likewise, for the Device tab's Watch board.
-                watch: isLightOs(nodeOs) && nodeTab === 'host',
               },
             }),
+      // A watch's page is read from its phone's row and sample; Apple's
+      // watchOS list only for the tab that draws it.
+      accessory:
+        machine !== null && watch
+          ? fetchAccessorySystemFn({ data: { id: machine, releases: nodeTab === 'ios' } })
+          : null,
       nodeClaude:
         machine !== null && nodeTab === 'claude'
           ? fetchNodeClaudeFn({ data: { id: machine } })
@@ -164,6 +188,7 @@ function CategoryPage() {
     machine,
     nodeTab,
     node,
+    accessory,
     nodeClaude,
   } = Route.useLoaderData()
   const { category } = Route.useParams()
@@ -191,7 +216,9 @@ function CategoryPage() {
           active={machine}
           tab={tab}
           identity={
-            nodeTab !== null ? (
+            accessory !== null ? (
+              <AccessoryHead promise={accessory} resetKey={sectionKey} />
+            ) : nodeTab !== null ? (
               <NodeHead promise={node} resetKey={sectionKey} />
             ) : boxHead !== null ? (
               <BoxHead h={boxHead} />
@@ -234,6 +261,23 @@ function CategoryPage() {
                   <p className={EMPTY}>No machine with that id. It may have been forgotten.</p>
                 ) : (
                   <NodeClaudeView d={d} />
+                )
+              }
+            </GuardedAwait>
+          ) : accessory !== null ? (
+            <GuardedAwait
+              resetKey={sectionKey}
+              slot="accessory"
+              promise={accessory}
+              fallback={<BoardsSkeleton spans={[...(nodeSpec?.boardSpans ?? [4, 4, 4])]} />}
+            >
+              {(d) =>
+                d === null ? (
+                  <p className={EMPTY}>
+                    No watch with that id. Its iPhone may have been forgotten, or reports none now.
+                  </p>
+                ) : (
+                  <WatchSystemView d={d} tab={nodeTab} />
                 )
               }
             </GuardedAwait>

@@ -334,3 +334,46 @@ describe('answers', () => {
     expect(warn).toHaveBeenCalled()
   })
 })
+
+describe('a phone’s watch', () => {
+  const WATCH = `${NODE.id}.watch`
+
+  it('is a machine id in a path, and nothing looser is', () => {
+    const params = ROUTES.find((r) => r.method === 'GET' && r.path === '/machines/:id')?.params
+    if (params === undefined) throw new Error('no such route')
+    for (const id of ['box', NODE.id, WATCH]) {
+      expect(params.safeParse({ id }).success, id).toBe(true)
+    }
+    for (const id of [`${NODE.id}.Watch`, `${NODE.id}.watch.watch`, 'box.watch', '.watch', 'x']) {
+      expect(params.safeParse({ id }).success, id).toBe(false)
+    }
+  })
+
+  it('takes no command: refused before anything is reached', async () => {
+    vi.spyOn(console, 'info').mockImplementation(() => undefined)
+    const r = await handleApiV1(
+      req('POST', `/machines/${WATCH}/command`, { body: { command: 'check_update' } }),
+      deps(),
+    )
+    expect(r.status).toBe(409)
+    expect(await errorOf(r)).toEqual({
+      code: 'refused',
+      message: 'A watch takes no commands from the box: its iPhone reports it.',
+    })
+  })
+
+  it('is no machine to Claude’s routes', async () => {
+    vi.spyOn(console, 'info').mockImplementation(() => undefined)
+    for (const request of [
+      req('POST', '/claude/restart', { body: { machine: WATCH } }),
+      req('POST', '/claude/session', {
+        body: { machine: WATCH, action: 'stop', session: 'abcdef12' },
+      }),
+      req('GET', `/claude/action?request=r1&machine=${WATCH}`),
+    ]) {
+      const r = await handleApiV1(request, deps())
+      expect(r.status).toBe(400)
+      expect((await errorOf(r)).code).toBe('bad_request')
+    }
+  })
+})

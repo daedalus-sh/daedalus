@@ -321,3 +321,53 @@ describe('keeping what the controller observed', () => {
     expect(h.desired).toBe(1)
   })
 })
+
+describe('naming a phone’s watch', () => {
+  const watch = { kind: 'watch', name: 'Santiago’s Apple Watch', at: '2026-11-12T10:00:00Z' }
+  const phone = (over: Record<string, unknown> = {}) => ({
+    id: 'p1',
+    state: 'approved',
+    os: 'ios',
+    policy: {},
+    device: { accessories: [watch] },
+    ...over,
+  })
+
+  it('writes one key of the phone’s row under the admin, and nothing follows', async () => {
+    h.rows = [[phone()]]
+    expect(await flows.setAccessoryName('p1', 'Wrist', 'alice')).toEqual({ ok: true, value: true })
+    expect(h.sets).toHaveLength(1)
+    expect(h.sets[0]).toMatchObject({ policyChangedBy: 'alice' })
+    const dialect = new PgDialect()
+    const { sql, params } = dialect.sqlToQuery(h.sets[0]?.policy as never)
+    expect(sql).toBe('("nodes"."policy") || $1::jsonb')
+    expect(params).toEqual(['{"watchName":"Wrist"}'])
+    // No machine hears a watch's name: no desired set, no DHCP lines, no gateway.
+    expect([h.desired, h.synced, h.dhcp, h.gateway]).toEqual([0, 0, 0, 0])
+  })
+
+  it('goes back to the reported name when emptied', async () => {
+    h.rows = [[phone({ policy: { watchName: 'Wrist' } })]]
+    expect((await flows.setAccessoryName('p1', '', 'alice')).ok).toBe(true)
+    const { sql, params } = new PgDialect().sqlToQuery(h.sets[0]?.policy as never)
+    expect(sql).toBe('("nodes"."policy" - $1::text) || $2::jsonb')
+    expect(params).toEqual(['watchName', '{}'])
+  })
+
+  it('refuses a phone with no watch, a revoked one, a computer and a stranger', async () => {
+    h.rows = [
+      [phone({ device: { accessories: [] } })],
+      [phone({ device: null })],
+      [phone({ state: 'revoked' })],
+      [phone({ os: 'macos' })],
+      [],
+    ]
+    for (let i = 0; i < 5; i++) {
+      expect(await flows.setAccessoryName('p1', 'Wrist', 'alice')).toEqual({
+        ok: false,
+        reason: 'No such watch: its iPhone reports none.',
+      })
+    }
+    expect(h.sets).toEqual([])
+  })
+})

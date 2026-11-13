@@ -7,14 +7,19 @@ import type { NodeRow } from '../../../lib/repo/nodes'
 import { machineDetail, machines } from './views'
 
 // What /api/v1 says of a phone's watch: in the list, a line of the phone's
-// item; on the phone's page, the watch's facts with Apple's watchOS list.
-// The loaders are the pages' own and are tested where they live; here they
-// answer what a phone with a watch, a phone without one and a Mac would.
+// item and a machine of its own directly after it; on the phone's page, the
+// watch's facts with Apple's watchOS list; and under its own id, the same as
+// a machine's page. The loaders are the pages' own and are tested where they
+// live; here they answer what a phone with a watch, a phone without one and a
+// Mac would. The watch's own loader (lib/dashboard/accessory-system.ts) runs
+// for real, over a controller that holds nothing and these rows.
 
 const h = vi.hoisted(() => ({
   rows: [] as unknown[],
   system: null as unknown,
   asked: [] as unknown[],
+  detail: null as unknown,
+  releases: null as unknown,
 }))
 
 vi.mock('../../../lib/dashboard/machines', () => ({
@@ -27,6 +32,14 @@ vi.mock('../../../lib/dashboard/node-system', () => ({
     h.asked.push([id, opts])
     return h.system
   },
+  watchReleases: async (a: { osVersion: string | null }) =>
+    a.osVersion === null ? null : h.releases,
+}))
+vi.mock('../../controller/nodes', () => ({
+  readNode: async () => ({ detail: h.detail, error: null, answered: true }),
+}))
+vi.mock('../../../lib/repo/nodes', () => ({
+  getNode: async (id: string) => (h.rows as { id: string }[]).find((n) => n.id === id) ?? null,
 }))
 vi.mock('../../../lib/dashboard/box-head', () => ({
   loadBoxHead: async () => ({
@@ -78,6 +91,7 @@ const node = (id: string, os: string, d: DeviceFacts | null): NodeRow =>
     lastSeenAt: '2026-11-12T10:00:00Z',
     light: os === 'ios' || os === 'ipados',
     claude: null,
+    policy: {},
     device: d,
   }) as NodeRow
 
@@ -126,6 +140,9 @@ beforeEach(() => {
   h.rows = []
   h.system = null
   h.asked = []
+  h.detail = null
+  h.releases = null
+  vi.useRealTimers()
 })
 
 describe('GET /machines', () => {
@@ -148,11 +165,114 @@ describe('GET /machines', () => {
           },
         ],
       ],
+      [`${PHONE}.watch`, []],
       [BARE, []],
       [MAC, []],
     ])
-    // The watch is a line of its phone, never a machine in the list.
-    expect(list).toHaveLength(4)
+  })
+
+  it('lists the watch as a machine of its own, directly after its phone', async () => {
+    vi.useFakeTimers({ now: new Date('2026-11-12T10:00:00Z') })
+    h.rows = [
+      node(MAC, 'macos', null),
+      { ...node(PHONE, 'ios', device([WATCH, { ...WATCH, name: 'An older one' }])), name: 'Phone' },
+      node(BARE, 'ios', device([])),
+    ]
+    const { machines: list } = await machines(ctx, PHONE)
+    expect(list.map((m) => [m.id, m.kind, m.via])).toEqual([
+      ['box', 'box', null],
+      [MAC, 'node', null],
+      [PHONE, 'node', null],
+      [`${PHONE}.watch`, 'accessory', { id: PHONE, name: 'Phone' }],
+      [BARE, 'node', null],
+    ])
+    // One watch per phone: the first its sample listed.
+    expect(list[3]).toEqual({
+      id: `${PHONE}.watch`,
+      kind: 'accessory',
+      name: 'Santiago’s Apple Watch',
+      os: 'watchos',
+      arch: '',
+      agentVersion: null,
+      state: 'approved',
+      connected: null,
+      // From the watch's own reading time, not its phone's.
+      lastSeenAgo: 90,
+      lastSeenAt: '2026-11-12T09:58:30Z',
+      light: true,
+      self: false,
+      model: 'Watch7,5',
+      updateAvailable: null,
+      restartPending: false,
+      claude: null,
+      battery: { percent: 64, charging: false },
+      accessories: [],
+      via: { id: PHONE, name: 'Phone' },
+    })
+  })
+
+  it('names the watch as Settings › Machines does, and drops it with a revoked phone', async () => {
+    const named = { ...node(PHONE, 'ios', device([WATCH])), policy: { watchName: 'Wrist' } }
+    const nameless = node(BARE, 'ios', device([{ ...WATCH, name: null }]))
+    const revoked = { ...node(MAC, 'ios', device([WATCH])), state: 'revoked' }
+    h.rows = [named, nameless, revoked]
+    const { machines: list } = await machines(ctx, PHONE)
+    expect(list.map((m) => [m.id, m.name])).toEqual([
+      ['box', 'box'],
+      [PHONE, PHONE],
+      [`${PHONE}.watch`, 'Wrist'],
+      [BARE, BARE],
+      [`${BARE}.watch`, 'Apple Watch'],
+      [MAC, MAC],
+    ])
+    // The phone's own line of it still carries what the watch calls itself.
+    expect(list[1]?.accessories[0]?.name).toBe('Santiago’s Apple Watch')
+  })
+})
+
+describe('GET /machines/<phone id>.watch', () => {
+  const { notes: _notes, ...row } = RELEASES.releases[0] as AppleOsReleases['releases'][number]
+
+  it('answers the watch’s facts and its watchOS list, through its phone', async () => {
+    h.rows = [{ ...node(PHONE, 'ios', device([WATCH])), name: 'Phone', policy: { watchName: 'W' } }]
+    h.releases = RELEASES
+    const d = await machineDetail(ctx, `${PHONE}.watch`, PHONE)
+    if (d === null || d.kind !== 'accessory') throw new Error('not an accessory')
+    expect(d.via).toEqual({ id: PHONE, name: 'Phone' })
+    expect(d.machine).toMatchObject({
+      id: `${PHONE}.watch`,
+      kind: 'accessory',
+      name: 'W',
+      os: 'watchos',
+      state: 'approved',
+      connected: null,
+      lastSeenAt: WATCH.at,
+      self: false,
+      via: { id: PHONE, name: 'Phone' },
+    })
+    // The existing AccessoryView: the reported name, never the display name.
+    expect(d.accessory).toEqual({ ...WATCH, osReleases: { ...RELEASES, releases: [row] } })
+    // The node loader was not asked: a watch is no node.
+    expect(h.asked).toEqual([])
+  })
+
+  it('has no list for a watch that has not said its watchOS', async () => {
+    h.rows = [node(PHONE, 'ios', device([{ ...WATCH, osVersion: null, osBuild: null }]))]
+    h.releases = RELEASES
+    const d = await machineDetail(ctx, `${PHONE}.watch`, PHONE)
+    if (d === null || d.kind !== 'accessory') throw new Error('not an accessory')
+    expect(d.accessory.osReleases).toBeNull()
+  })
+
+  it('is no machine when the phone has no watch, is revoked, is gone, or is a computer', async () => {
+    h.rows = [
+      node(BARE, 'ios', device([])),
+      { ...node(PHONE, 'ios', device([WATCH])), state: 'revoked' },
+      node(MAC, 'macos', null),
+    ]
+    for (const id of [BARE, PHONE, MAC, 'dddddddddddddddd']) {
+      expect(await machineDetail(ctx, `${id}.watch`, PHONE), id).toBeNull()
+    }
   })
 })
 

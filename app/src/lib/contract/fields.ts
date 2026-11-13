@@ -1,3 +1,4 @@
+import { isAccessoryId } from '../agent/accessory'
 import { secretKeyError } from '../apps/secret-keys'
 import { isAppName } from '../hostname'
 import { isRecord } from '../is-record'
@@ -95,6 +96,12 @@ const NODE_ID = /^[0-9a-f]{16}$/
 export const nodeIdField: Decoder<string> = withMessage(
   is((v: unknown): v is string => typeof v === 'string' && NODE_ID.test(v), 'a node id'),
   'expected a node id',
+)
+
+/** A watch's machine id: its phone's node id, then `.watch` (lib/agent/accessory.ts). */
+export const accessoryIdField: Decoder<string> = withMessage(
+  is(isAccessoryId, 'a watch id'),
+  'expected a watch id',
 )
 
 /**

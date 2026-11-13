@@ -1,10 +1,12 @@
+import { Link } from '@tanstack/react-router'
+import type { ReactNode } from 'react'
 import { Ago } from '../../../../components/ago'
 import { Board, BoardGrid, Chip, Facts, Measures, Progress } from '../../../../components/viz'
-import { deviceFactsFrom, lightKind } from '../../../../lib/agent/light'
+import { accessoryOf } from '../../../../lib/agent/accessory'
+import { type DeviceFacts, deviceFactsFrom, lightKind } from '../../../../lib/agent/light'
 import type { NodeSystemData } from '../../../../lib/dashboard/node-system'
 import { bytes, DASH, pct } from '../../../../lib/format'
 import { EMPTY, FOOT, lightOsName, loadTone, MONO, NOTE, share } from './shared'
-import { WatchBoard, WatchReleasesBoard } from './watch'
 
 /* ── Device ───────────────────────────────────────────────────────────── */
 
@@ -18,8 +20,8 @@ import { WatchBoard, WatchReleasesBoard } from './watch'
  * read beside them. Being away is the device's usual state and is said as
  * when it was last seen, never as a fault.
  *
- * Its watch, when it has one, follows: an accessory the phone reports beside
- * itself (./watch.tsx), never a machine of its own.
+ * Its watch, when it has one, is a machine of its own in the picker
+ * (./watch.tsx); here it is one line, the way there.
  */
 export function NodeDeviceView({ d }: { d: NodeSystemData }) {
   const { node } = d
@@ -48,11 +50,7 @@ export function NodeDeviceView({ d }: { d: NodeSystemData }) {
     )
   }
 
-  const battery = f.battery
-  const total = f.storage?.totalBytes ?? null
-  const free = f.storage?.freeBytes ?? null
-  const used = total === null || free === null ? null : total - free
-  const usedPct = share(used, total)
+  const watch = accessoryOf(node)
 
   return (
     <BoardGrid>
@@ -78,6 +76,22 @@ export function NodeDeviceView({ d }: { d: NodeSystemData }) {
               v: <span className={MONO}>{f.appVersion ?? node.agentVersion}</span>,
             },
             { k: 'Memory', v: bytes(f.memoryBytes) },
+            ...(watch === null
+              ? []
+              : [
+                  {
+                    k: 'Watch',
+                    v: (
+                      <Link
+                        to="/c/$category"
+                        params={{ category: 'system' }}
+                        search={{ machine: watch.id }}
+                      >
+                        {watch.name}
+                      </Link>
+                    ),
+                  },
+                ]),
             {
               k: 'Link',
               v:
@@ -101,59 +115,84 @@ export function NodeDeviceView({ d }: { d: NodeSystemData }) {
         </p>
       </Board>
 
-      <Board
-        title="Battery"
-        icon="▮"
-        span={4}
-        aside={
-          battery !== null &&
-          battery.charging !== null && (
-            <Chip tone={battery.charging ? 'ok' : 'muted'}>
-              {battery.charging ? 'charging' : 'on battery'}
-            </Chip>
-          )
-        }
-      >
-        {battery === null || battery.percent === null ? (
-          <p className={EMPTY}>not reported</p>
-        ) : (
-          <>
-            <Measures items={[{ k: 'charge', v: pct(battery.percent, 0) }]} />
-            <Progress pct={battery.percent} tone="muted" />
-          </>
-        )}
-        <p className={FOOT}>
-          {live ? 'As the device reads it now.' : 'As of the last time the device was connected.'}{' '}
-          iOS tells an app the charge and whether it is charging, and nothing about the
-          battery&rsquo;s health or cycles.
-        </p>
-      </Board>
+      <BatteryBoard battery={f.battery}>
+        {live ? 'As the device reads it now.' : 'As of the last time the device was connected.'} iOS
+        tells an app the charge and whether it is charging, and nothing about the battery&rsquo;s
+        health or cycles.
+      </BatteryBoard>
 
-      <Board title="Storage" icon="◫" span={4}>
-        {total === null ? (
-          <p className={EMPTY}>not reported</p>
-        ) : (
-          <>
-            <Measures
-              items={[
-                { k: 'used', v: bytes(used) },
-                { k: 'free', v: bytes(free) },
-                { k: 'total', v: bytes(total) },
-              ]}
-            />
-            <Progress pct={usedPct} tone={loadTone(usedPct)} />
-          </>
-        )}
-        <p className={FOOT}>
-          The device&rsquo;s own volume, as iOS counts it for an app: free is what could be written
-          now, which iOS can enlarge by clearing caches.
-        </p>
-      </Board>
-
-      {d.accessories.flatMap((a, i) => [
-        <WatchBoard key={`watch-${String(i)}`} a={a} phone={kind} />,
-        <WatchReleasesBoard key={`watch-releases-${String(i)}`} a={a} />,
-      ])}
+      <StorageBoard storage={f.storage}>
+        The device&rsquo;s own volume, as iOS counts it for an app: free is what could be written
+        now, which iOS can enlarge by clearing caches.
+      </StorageBoard>
     </BoardGrid>
+  )
+}
+
+/** The charge a device reported, for a phone and for its watch. `children` is the board's foot. */
+export function BatteryBoard({
+  battery,
+  children,
+}: {
+  battery: DeviceFacts['battery']
+  children: ReactNode
+}) {
+  return (
+    <Board
+      title="Battery"
+      icon="▮"
+      span={4}
+      aside={
+        battery !== null &&
+        battery.charging !== null && (
+          <Chip tone={battery.charging ? 'ok' : 'muted'}>
+            {battery.charging ? 'charging' : 'on battery'}
+          </Chip>
+        )
+      }
+    >
+      {battery === null || battery.percent === null ? (
+        <p className={EMPTY}>not reported</p>
+      ) : (
+        <>
+          <Measures items={[{ k: 'charge', v: pct(battery.percent, 0) }]} />
+          <Progress pct={battery.percent} tone="muted" />
+        </>
+      )}
+      <p className={FOOT}>{children}</p>
+    </Board>
+  )
+}
+
+/** The volume a device reported, for a phone and for its watch. `children` is the board's foot. */
+export function StorageBoard({
+  storage,
+  children,
+}: {
+  storage: DeviceFacts['storage']
+  children: ReactNode
+}) {
+  const total = storage?.totalBytes ?? null
+  const free = storage?.freeBytes ?? null
+  const used = total === null || free === null ? null : total - free
+  const usedPct = share(used, total)
+  return (
+    <Board title="Storage" icon="◫" span={4}>
+      {total === null ? (
+        <p className={EMPTY}>not reported</p>
+      ) : (
+        <>
+          <Measures
+            items={[
+              { k: 'used', v: bytes(used) },
+              { k: 'free', v: bytes(free) },
+              { k: 'total', v: bytes(total) },
+            ]}
+          />
+          <Progress pct={usedPct} tone={loadTone(usedPct)} />
+        </>
+      )}
+      <p className={FOOT}>{children}</p>
+    </Board>
   )
 }

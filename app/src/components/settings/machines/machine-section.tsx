@@ -55,12 +55,12 @@ export function MachinesHead() {
  * once the table is too narrow to show those columns, so it is said once.
  */
 /** An open machine: a faint well, so its story reads as inside the row and the next row as the next machine. */
-const OPEN = 'bg-foreground/[0.018]'
+export const OPEN = 'bg-foreground/[0.018]'
 
 export type Fact = { k: string; v: ReactNode; wide?: boolean; half?: boolean; narrow?: boolean }
 
 /** A machine's facts, label over value, as many to a line as the width takes. */
-function Facts({ facts }: { facts: Fact[] }) {
+export function Facts({ facts }: { facts: Fact[] }) {
   return (
     <dl className="m-0 grid grid-cols-4 gap-x-8 @max-[46rem]/table:grid-cols-2 @max-[30rem]/table:grid-cols-1 gap-y-4 border-hairline border-t px-5 py-5">
       {facts.map((f) => (
@@ -82,7 +82,7 @@ function Facts({ facts }: { facts: Fact[] }) {
 }
 
 /** The summary line of a row: a link that opens or closes it, stretched over the line. */
-function Summary({
+export function Summary({
   id,
   open,
   toggles,

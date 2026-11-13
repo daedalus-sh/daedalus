@@ -1,4 +1,5 @@
 import type { Ctx } from '../../../core/ctx'
+import { type Accessory, accessoryOf, isAccessoryId } from '../../../lib/agent/accessory'
 import type { DeviceAccessory } from '../../../lib/agent/light'
 import type {
   AccessoryItem,
@@ -233,6 +234,37 @@ function nodeItem(
     claude: n.light ? null : claudeSummary(n.claude),
     battery: n.device?.battery ?? null,
     accessories: n.light ? accessories.map(accessoryItem) : [],
+    via: null,
+  }
+}
+
+/**
+ * A phone's watch as a machine in the list (lib/agent/accessory.ts): nothing
+ * the box links to, so its state is its phone's, its link is unknown, and
+ * "last seen" is when the watch itself read its facts.
+ */
+function accessoryMachine(a: Pick<Accessory, 'id' | 'name' | 'facts' | 'phone'>): MachineItem {
+  const read = Date.parse(a.facts.at)
+  return {
+    id: a.id,
+    kind: 'accessory',
+    name: a.name,
+    os: 'watchos',
+    arch: '',
+    agentVersion: null,
+    state: 'approved',
+    connected: null,
+    lastSeenAgo: Number.isFinite(read) ? Math.max(0, Math.round((Date.now() - read) / 1000)) : 0,
+    lastSeenAt: a.facts.at,
+    light: true,
+    self: false,
+    model: a.facts.model,
+    updateAvailable: null,
+    restartPending: false,
+    claude: null,
+    battery: a.facts.battery,
+    accessories: [],
+    via: a.phone,
   }
 }
 
@@ -275,16 +307,19 @@ async function boxItem(ctx: Ctx): Promise<MachineItem> {
           },
     battery: null,
     accessories: [],
+    via: null,
   }
 }
 
-/** The box first, then every decided machine in the order it joined. */
+/** The box first, then every decided machine in the order it joined, a phone's watch directly after it. */
 export async function machines(ctx: Ctx, self: string): Promise<Machines> {
   const { loadMachines } = await import('../../../lib/dashboard/machines')
   const [box, m] = await Promise.all([boxItem(ctx), loadMachines(ctx)])
-  const nodes = m.machines
-    .filter((x) => x.node !== null)
-    .map((x) => nodeItem(x.node as NodeRow, x.status, self))
+  const nodes = m.machines.flatMap((x) => {
+    if (x.node === null) return []
+    const watch = accessoryOf(x.node)
+    return [nodeItem(x.node, x.status, self), ...(watch === null ? [] : [accessoryMachine(watch)])]
+  })
   return { machines: [box, ...nodes] }
 }
 
@@ -332,7 +367,7 @@ const withoutNotes = (r: AppleOsReleases): ApiAppleOsReleases => ({
   releases: r.releases.map(({ notes: _notes, ...rest }) => rest),
 })
 
-/** One machine's page: the box's vitals for `box`, a node's last report otherwise. Null: no such machine. */
+/** One machine's page: the box's vitals for `box`, a watch's facts for an accessory id, a node's last report otherwise. Null: no such machine. */
 export async function machineDetail(
   ctx: Ctx,
   id: string,
@@ -346,6 +381,19 @@ export async function machineDetail(
       section(() => storageSection(ctx)),
     ])
     return { machine, kind: 'box', host, memory, storage }
+  }
+  if (isAccessoryId(id)) {
+    const { loadAccessorySystem } = await import('../../../lib/dashboard/accessory-system')
+    const w = await loadAccessorySystem(ctx, id, { releases: true })
+    if (w === null) return null
+    const { releases, ...facts } = w.accessory
+    const via = { id: w.phone.id, name: w.phone.name }
+    return {
+      machine: accessoryMachine({ id: w.id, name: w.name, facts, phone: via }),
+      kind: 'accessory',
+      accessory: { ...facts, osReleases: releases === null ? null : withoutNotes(releases) },
+      via,
+    }
   }
   const { loadNodeSystem } = await import('../../../lib/dashboard/node-system')
   const d = await loadNodeSystem(ctx, id, { ios: true, watch: true })

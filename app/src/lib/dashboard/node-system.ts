@@ -57,7 +57,8 @@ export type NodeSystemData = {
   /**
    * A phone's paired watch, from its live sample when the controller holds
    * one and from what the box kept when it does not; empty for every other
-   * machine. Its `releases` are read only for the Device tab.
+   * machine. Its `releases` are read only for /api/v1's page of the phone;
+   * the web draws the watch as a machine of its own (./accessory-system.ts).
    */
   accessories: NodeAccessory[]
   /** Processor busy, six hours at two-minute steps, from the box's Prometheus. */
@@ -173,16 +174,16 @@ async function accessoriesFor(
   const live = d === null ? null : deviceFactsFrom(d, node.device, new Date().toISOString())
   const list = (live ?? node.device)?.accessories ?? []
   return Promise.all(
-    list.map(async (a) => ({
-      ...a,
-      releases:
-        releases && a.osVersion !== null
-          ? await iosReleases(
-              'watchos',
-              a.osBuild === null ? a.osVersion : `${a.osVersion} (${a.osBuild})`,
-              a.model,
-            )
-          : null,
-    })),
+    list.map(async (a) => ({ ...a, releases: releases ? await watchReleases(a) : null })),
+  )
+}
+
+/** Apple's watchOS list past what a watch runs; null when it has not said which. */
+export async function watchReleases(a: DeviceAccessory): Promise<AppleOsReleases | null> {
+  if (a.osVersion === null) return null
+  return iosReleases(
+    'watchos',
+    a.osBuild === null ? a.osVersion : `${a.osVersion} (${a.osBuild})`,
+    a.model,
   )
 }

@@ -1,5 +1,6 @@
 import { Link } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
+import { accessoryOf } from '../lib/agent/accessory'
 import { lightKind } from '../lib/agent/light'
 import { cn } from '../lib/cn'
 import type { NodeRow } from '../lib/repo/nodes'
@@ -127,8 +128,8 @@ export function MachineSwitcher({
 }
 
 /**
- * System's picker: this box, then every approved node. Drawn only once there
- * is a node — a box alone has nothing to pick.
+ * System's picker: this box, then every approved node, a phone's watch after
+ * its phone. Drawn only once there is a node — a box alone has nothing to pick.
  *
  * The count on a node is its Claude sessions (on every tab, so an item is the
  * same width whichever tab is open); `counts` and `dots` add or override per
@@ -169,24 +170,45 @@ export function MachinePicker({
       count: counts?.[''] ?? null,
       dot: dots?.[''] ?? null,
     },
-    ...nodes.map(
-      (n): MachineItem => ({
-        key: n.id,
-        label: n.name,
-        os: n.os,
-        selected: active === n.id,
-        link: link(n.id),
-        count: counts?.[n.id] !== undefined ? counts[n.id] : (n.claude?.sessions ?? null),
-        dot: dots?.[n.id] ?? null,
-        // A phone or tablet is away most of the day, and that is its norm: it
-        // never wears a dot for it, whatever a caller passes for a computer.
-        title: n.light
-          ? lightKind(n.os)
-          : n.claude !== null && n.claude.sessions > 0
-            ? `${String(n.claude.sessions)} Claude sessions`
-            : undefined,
-      }),
-    ),
+    ...nodes.flatMap((n): MachineItem[] => {
+      // A phone's watch is an entry of its own, directly after its phone: a
+      // machine to look at, derived here from the phone's row and nowhere
+      // the list comes from (lib/agent/accessory.ts).
+      const watch = accessoryOf(n)
+      return [
+        nodeItem(n),
+        ...(watch === null
+          ? []
+          : [
+              {
+                key: watch.id,
+                label: watch.name,
+                os: 'watchos',
+                selected: active === watch.id,
+                link: link(watch.id),
+                title: `Apple Watch, reported by ${n.name}`,
+              },
+            ]),
+      ]
+    }),
   ]
+  function nodeItem(n: NodeRow): MachineItem {
+    return {
+      key: n.id,
+      label: n.name,
+      os: n.os,
+      selected: active === n.id,
+      link: link(n.id),
+      count: counts?.[n.id] !== undefined ? counts[n.id] : (n.claude?.sessions ?? null),
+      dot: dots?.[n.id] ?? null,
+      // A phone or tablet is away most of the day, and that is its norm: it
+      // never wears a dot for it, whatever a caller passes for a computer.
+      title: n.light
+        ? lightKind(n.os)
+        : n.claude !== null && n.claude.sessions > 0
+          ? `${String(n.claude.sessions)} Claude sessions`
+          : undefined,
+    }
+  }
   return <MachineSwitcher items={items} identity={identity} />
 }

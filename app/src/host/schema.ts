@@ -722,6 +722,12 @@ export type NodePolicy = {
   /** What the pages call the machine instead of its hostname. */
   displayName?: string
   /**
+   * What the pages call a phone's watch (lib/agent/accessory.ts), which has no
+   * row of its own: unset, the name the watch reports. Only the pages read
+   * it; neither the controller nor the phone ever hears it.
+   */
+  watchName?: string
+  /**
    * What the machine is called ON THE NETWORK: a DNS label
    * (lib/nodes-file.ts NODE_NAME_RE), unique among approved nodes. Unset,
    * the hostname slugified. pi-hole gives the lease this name (the box
