@@ -24,9 +24,11 @@ public enum DaedalusApp {
     /// Ask iOS for a refresh, no sooner than a quarter of an hour from now. When it comes is iOS's
     /// call: a few times a day for an app opened now and then, never once the app is swiped away.
     static func scheduleRefresh() {
-        let request = BGAppRefreshTaskRequest(identifier: refreshTask)
-        request.earliestBeginDate = Date(timeIntervalSinceNow: 15 * 60)
-        try? BGTaskScheduler.shared.submit(request)
+        Task {
+            let request = BGAppRefreshTaskRequest(identifier: refreshTask)
+            request.earliestBeginDate = Date(timeIntervalSinceNow: 15 * 60)
+            try? await BGTaskScheduler.shared.submitTaskRequest(request)
+        }
     }
 }
 
