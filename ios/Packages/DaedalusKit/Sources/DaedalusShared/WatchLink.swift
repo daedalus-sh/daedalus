@@ -1,7 +1,8 @@
 import Foundation
 
 /// What travels between the iPhone app and its watch app, over WatchConnectivity's application context
-/// (the latest value wins, delivered when the other side next runs). Foundation only: both apps build it.
+/// (the latest value wins, delivered when the other side next runs). The watch also sends its facts as a
+/// message, under the same key, when the iPhone is in reach. Foundation only: both apps build it.
 public enum WatchLink {
     /// Watch → iPhone: `WatchFacts`, as JSON.
     public static let factsKey = "watch"

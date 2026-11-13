@@ -1,7 +1,8 @@
 import type { NodeDetail, Telemetry } from '../../host/controller/generated'
 
 // A light node: a phone or tablet running the native app. It holds a key and
-// links to the controller like every machine, but only while its app is open,
+// links to the controller like every machine, but only while its app is open
+// (and for a moment a few times a day, when iOS wakes it to report),
 // and it runs no Claude, no provider, no session host and no awake hold. So
 // "not connected" is its normal state — shown as when it was last seen, never
 // as a fault — and the box keeps what it last said about itself

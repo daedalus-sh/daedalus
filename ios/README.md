@@ -11,7 +11,9 @@ The app is a **light node** of the box. Pairing (a QR code from Settings › Mac
   profile and no Network Extension: nothing else on the device uses the tunnel, and the app works
   whether or not the device is on a VPN;
 - a node key, with which it links to the controller like every machine and reports itself (battery, OS
-  version, model, storage, app version) while it is open;
+  version, model, storage, app version): every minute while it is open, and closed, when iOS grants a
+  background refresh (a few times a day, never after the app is swiped away) or its watch hands it a
+  fresh reading;
 - an API token for `/api/v1`, the box's API for this app.
 
 ```

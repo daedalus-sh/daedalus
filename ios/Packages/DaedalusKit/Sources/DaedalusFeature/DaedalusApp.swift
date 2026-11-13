@@ -1,8 +1,33 @@
+import BackgroundTasks
 import SwiftUI
 
-/// The app's one product. The app target embeds `DaedalusApp.rootView`.
+/// The app's one product. The app target embeds `DaedalusApp.rootView`, calls `launch()` when it starts
+/// and forwards its background refresh to `refresh()`.
 public enum DaedalusApp {
     public static var rootView: some View { AppRoot() }
+
+    /// The background refresh's identifier. Config/Info.plist permits it by the same spelling.
+    public static var refreshTask: String { (Bundle.main.bundleIdentifier ?? "") + ".report" }
+
+    /// Every start of the app, in the foreground or not: listen to the watch, which may be why iOS
+    /// started it.
+    public static func launch() {
+        WatchBridge.shared.start()
+    }
+
+    /// iOS woke the app for a refresh: ask for the next one, and report this device (and its watch).
+    public static func refresh() async {
+        scheduleRefresh()
+        await Box.shared.reportInBackground()
+    }
+
+    /// Ask iOS for a refresh, no sooner than a quarter of an hour from now. When it comes is iOS's
+    /// call: a few times a day for an app opened now and then, never once the app is swiped away.
+    static func scheduleRefresh() {
+        let request = BGAppRefreshTaskRequest(identifier: refreshTask)
+        request.earliestBeginDate = Date(timeIntervalSinceNow: 15 * 60)
+        try? BGTaskScheduler.shared.submit(request)
+    }
 }
 
 /// Unpaired, the app is one screen: scan the code. Paired, it is the box.
@@ -24,7 +49,8 @@ struct AppRoot: View {
                 }
             } else if box.isPaired {
                 MainView()
-                    // The node reports itself while the app is open: now, then every minute.
+                    // The node reports itself while the app is open: now, then every minute. Closed, it
+                    // reports when iOS grants a refresh (`DaedalusApp.refresh`) or the watch asks.
                     .task(id: box.epoch) {
                         while !Task.isCancelled {
                             await box.reportDevice()
@@ -37,7 +63,6 @@ struct AppRoot: View {
         }
         .tint(DS.brand)
         .animation(.default, value: box.isPaired)
-        .task { WatchBridge.shared.start() }
         .onOpenURL { url in
             guard let link = PairLink(url: url) else { return }
             if box.isPaired {
@@ -59,9 +84,12 @@ struct AppRoot: View {
         } message: {
             Text("This device forgets \(box.pairing?.boxName ?? "its box"). Remove it there in Settings › Machines.")
         }
-        .onChange(of: scenePhase) { _, phase in
+        // From the first value on: an app iOS started in the background may meet its scene late.
+        .onChange(of: scenePhase, initial: true) { _, phase in
             switch phase {
-            case .background: Task { await box.suspend() }
+            case .background:
+                DaedalusApp.scheduleRefresh()
+                Task { await box.suspend() }
             case .active: box.resume()
             default: break
             }

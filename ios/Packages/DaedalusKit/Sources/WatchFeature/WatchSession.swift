@@ -25,13 +25,17 @@ final class WatchSession {
     }
 
     /// Hand the iPhone a fresh reading. The context is kept until the iPhone app next runs, and a newer
-    /// one replaces it, so this is cheap to call often.
+    /// one replaces it, so this is cheap to call often. With the iPhone in reach the reading goes as a
+    /// message too: iOS starts the iPhone app for one, and it reports to the box without being opened.
     func report() {
         guard WCSession.isSupported(), WCSession.default.activationState == .activated,
               let data = WatchLink.encode(WatchReading.now())
         else { return }
         do {
             try WCSession.default.updateApplicationContext([WatchLink.factsKey: data])
+            if WCSession.default.isReachable {
+                WCSession.default.sendMessage([WatchLink.factsKey: data], replyHandler: nil, errorHandler: nil)
+            }
             lastReport = .now
         } catch {}
     }

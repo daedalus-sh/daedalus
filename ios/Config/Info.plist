@@ -14,5 +14,14 @@
 			</array>
 		</dict>
 	</array>
+	<!-- The background report (DaedalusApp.refreshTask spells the same identifier). -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+	</array>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>$(PRODUCT_BUNDLE_IDENTIFIER).report</string>
+	</array>
 </dict>
 </plist>

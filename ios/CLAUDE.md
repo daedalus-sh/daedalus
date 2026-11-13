@@ -12,6 +12,10 @@
   pure goes there, with a test; it is the only Swift that can be compiled off a Mac.
 - Every screen reads through a `Feed` (keeps the last value on screen while refreshing) and polls with
   `.task(id: box.epoch)`, so it stops in the background and starts fresh on return.
+- The node reports from the background too: `Box.reportInBackground` (one sample, then the core stops),
+  run by the app refresh iOS grants (`DaedalusApp.refresh`) and by a reading from the watch
+  (`WatchBridge`). Screens never call the box there. The Keychain items are after-first-unlock so this
+  works with the screen locked.
 - Something that changes the box goes through `ActionButton` or an explicit confirmation, and shows the
   box's own refusal text.
 - Don't hand-edit `project.pbxproj` to add files: `Daedalus/` is a synchronized folder, and package files

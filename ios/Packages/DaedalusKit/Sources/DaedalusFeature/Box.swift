@@ -38,9 +38,15 @@ final class Box {
 
     @ObservationIgnored private var session: URLSession?
     @ObservationIgnored private var opening: Task<URLSession, Error>?
+    /// Out of the foreground: the screens make no calls. True from the start when iOS launched the app
+    /// in the background (a refresh, or the watch asking).
     @ObservationIgnored private var suspended = false
+    /// A background report is under way: it owns the core until it ends.
+    @ObservationIgnored private var reporting = false
 
     init() {
+        suspended = UIApplication.shared.applicationState == .background
+        Keychain.openAfterFirstUnlock()
         pairing = Keychain.read(Pairing.self, account: Keychain.pairing)
     }
 
@@ -142,14 +148,58 @@ final class Box {
         await NodeCore.report(sample)
     }
 
+    /// One report with the app out of the foreground: bring the core up, hand the link a sample, wait for
+    /// the link to carry it to the controller, and let the core go again. iOS gives a refresh about 30 s.
+    /// Does nothing while the app is open: its own loop reports then.
+    func reportInBackground() async {
+        restorePairing()
+        guard isPaired, !removed, !reporting, UIApplication.shared.applicationState == .background else { return }
+        reporting = true
+        defer { reporting = false }
+        if (try? await transport()) != nil, let sample = DeviceFacts.current().telemetry() {
+            await NodeCore.report(sample)
+            await delivered()
+        }
+        // Opened meanwhile, the app keeps the core: it is the foreground's now.
+        if UIApplication.shared.applicationState == .background { await close() }
+    }
+
+    /// The same, when nothing else holds the app awake (the watch asked): iOS is told the work is under
+    /// way, and the work stops when iOS says time is up.
+    func reportHeld() async {
+        let work = Task { await reportInBackground() }
+        let hold = UIApplication.shared.beginBackgroundTask(withName: "report") { work.cancel() }
+        await work.value
+        UIApplication.shared.endBackgroundTask(hold)
+    }
+
+    /// Wait until the link is up and approved (it pushes the sample at once then), and give that write a
+    /// moment to leave through the tunnel. Gives up after 20 s, or when the task is cancelled.
+    private func delivered() async {
+        for _ in 0..<40 where !Task.isCancelled {
+            if let link = await NodeCore.status()?.link, link.connected == true, link.state == "approved" {
+                try? await Task.sleep(for: .seconds(2))
+                return
+            }
+            try? await Task.sleep(for: .milliseconds(500))
+        }
+    }
+
+    /// A launch before the device's first unlock reads no Keychain: read the pairing again once it can be.
+    private func restorePairing() {
+        if pairing == nil { pairing = Keychain.read(Pairing.self, account: Keychain.pairing) }
+    }
+
     /// The app left the foreground: iOS stops the core's sockets there, so let it go and start clean.
+    /// A background report under way keeps the core and lets it go itself.
     func suspend() async {
         suspended = true
-        await close()
+        if !reporting { await close() }
     }
 
     /// Back in the foreground: calls go out again, over a core the first of them starts.
     func resume() {
+        restorePairing()
         guard suspended else { return }
         suspended = false
         epoch += 1
@@ -261,7 +311,8 @@ final class Box {
 }
 
 /// Generic-password Keychain items, as JSON. This device only, never synced or restored to another: they
-/// hold the tunnel's private key, the node's key and its token.
+/// hold the tunnel's private key, the node's key and its token. Readable once the device has been unlocked
+/// since it started, so a background report works with the screen locked.
 enum Keychain {
     static let pairing = "box"
     static let identity = "node"
@@ -294,8 +345,18 @@ enum Keychain {
         guard status == errSecItemNotFound else { return status == errSecSuccess }
         var item = base
         item[kSecValueData as String] = data
-        item[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+        item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         return SecItemAdd(item as CFDictionary, nil) == errSecSuccess
+    }
+
+    /// Items saved before background reports were readable only while unlocked: move them over. Done at
+    /// every launch; it changes nothing once moved, and waits for an unlocked launch if the device is locked.
+    static func openAfterFirstUnlock() {
+        for account in [pairing, identity] {
+            _ = SecItemUpdate(query(account) as CFDictionary, [
+                kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+            ] as CFDictionary)
+        }
     }
 
     static func delete(account: String) {

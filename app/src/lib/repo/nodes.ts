@@ -64,7 +64,7 @@ export type NodeRow = {
   claude: Summary | null
   /** Seconds since the controller last heard from it (resolved on the server; the page streams). */
   lastSeenAgo: number
-  /** A phone or tablet (lib/agent/light.ts): connected only while its app is open. */
+  /** A phone or tablet (lib/agent/light.ts): connected while its app is open, and briefly when iOS wakes it to report. */
   light: boolean
   /** What a light node last said about itself; null for every other machine. */
   device: DeviceFacts | null

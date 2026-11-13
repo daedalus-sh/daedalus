@@ -1,9 +1,11 @@
 import DaedalusShared
 import Foundation
+import UIKit
 import WatchConnectivity
 
 /// The iPhone's end of the channel to its watch: it keeps the watch's latest reading (to report to the
-/// box as an accessory of this node) and hands the watch the box's glance.
+/// box as an accessory of this node) and hands the watch the box's glance. A reading that arrives while
+/// the app is closed is reported at once: iOS starts the app for it.
 ///
 /// WatchConnectivity calls its delegate on a background queue. With this package's default main-actor
 /// isolation a delegate would be main-actor code and trap there, so this type is nonisolated and keeps
@@ -51,6 +53,13 @@ nonisolated final class WatchBridge: NSObject, WCSessionDelegate, @unchecked Sen
 
     func session(_ session: WCSession, didReceiveApplicationContext applicationContext: [String: Any]) {
         keep(applicationContext)
+        Task { @MainActor in await Box.shared.reportHeld() }
+    }
+
+    /// The watch asking for a report now: the same reading as a message, which iOS starts this app for.
+    func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {
+        keep(message)
+        Task { @MainActor in await Box.shared.reportHeld() }
     }
 
     func sessionDidBecomeInactive(_ session: WCSession) {}

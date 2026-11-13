@@ -7,7 +7,8 @@
 //! address alone. No Network Extension, no VPN profile, no route. What
 //! makes it light (agent/core/src/link/wire.rs `NodeKind`): it reports its
 //! telemetry and nothing else, takes no policy and no command, and is on
-//! the link only while the app is in the foreground.
+//! the link only while the app is in the foreground, plus the moments iOS
+//! wakes it in the background to send one sample.
 //!
 //! ```text
 //! the app ─ daedalus_report ─▶ link (TLS, pinned) ──────────┐

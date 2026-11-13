@@ -196,7 +196,7 @@ struct MachineDetailView: View {
         } header: {
             Text("Device")
         } footer: {
-            Text("As it last reported, \(Format.ago(device.at)). A phone or tablet reports while its app is open.")
+            Text("As it last reported, \(Format.ago(device.at)). A phone or tablet reports while its app is open, and a few times a day when it is not.")
         }
     }
 
@@ -255,7 +255,7 @@ struct MachineDetailView: View {
             Text("Watch")
         } footer: {
             if let at = accessory.at {
-                Text("As its iPhone last reported, \(Format.ago(at)). The watch has no link of its own: its app hands this to the iPhone app.")
+                Text("As its iPhone last reported, \(Format.ago(at)). The watch has no link of its own: its app hands this to the iPhone app, a few times a day without being opened.")
             }
         }
         if let releases = accessory.osReleases { releaseParts(releases) }
