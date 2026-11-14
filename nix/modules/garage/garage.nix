@@ -42,7 +42,8 @@
 #     token, and none is configured; every bootstrap drives `garage json-api`
 #     over the RPC port, which binds the container's loopback only. /health
 #     is open by design; /metrics requires the metrics token.
-#   - The admin (3903) and RPC (3901) ports are published nowhere. The S3 port
+#   - The admin (3903) and RPC (3901) ports are published nowhere; the one
+#     admin path routed is `/health`, on the S3 hostname, for the probe. The S3 port
 #     is published on the host only when a tenant sits inside a VPN netns
 #     (`reach = "hostPort"`), which has no bridge to dial — on every address,
 #     because a rootless publish bound to 127.0.0.1 is unreachable through
@@ -261,7 +262,13 @@ in
       ++ (map (n: {
         assertion = !(lib.elem n reserved);
         message = "fleet.appBuckets.\"${n}\": reserved name — `cluster` and `console` hold the store's own secrets under the machine state.";
-      }) bucketNames);
+      }) bucketNames)
+      ++ [
+        {
+          assertion = !(lib.elem "health" bucketNames);
+          message = "fleet.appBuckets.\"health\": reserved name — `/health` on the S3 hostname is the store's health endpoint, not a bucket.";
+        }
+      ];
 
     # garage-net carries the store and its tenants; traefik joins it for the
     # LAN route, prometheus reaches the admin port over monitoring-net.
@@ -272,13 +279,34 @@ in
 
     # The S3 API for the operator's own clients, LAN only. Signed requests
     # only, so no forward-auth: a gate in front of SigV4 would break every
-    # client. The probe's anonymous request is answered by Garage itself (403),
-    # which a dead store cannot do (traefik answers 502).
+    # client. The probe asks Garage's own health endpoint (below), which is
+    # 200 only while the cluster is available.
     fleet.webApps.s3 = {
       hostname = lib.mkDefault "s3.${config.fleet.baseDomain}";
       serviceName = "garage";
       port = s3Port;
-      healthPath = "/";
+      healthPath = "/health";
+    };
+
+    # `/health` on the S3 hostname is the admin API's open health endpoint,
+    # and nothing else of the admin port is routed. An anonymous request to
+    # the S3 port can only be refused (403, logged by Garage once per probe),
+    # and that 403 says nothing about the cluster. Exact path, with a priority
+    # that outranks the webApp's Host() router; a bucket named `health` would
+    # be hidden from path-style listing here, so the name is refused above.
+    fleet.traefikRawRules."garage-health.yml" = builtins.toJSON {
+      http = {
+        routers.garage-health-rtr = {
+          entryPoints = [ "websecure" ];
+          rule = "Host(`${config.fleet.webApps.s3.hostname}`) && Path(`/health`)";
+          priority = 10000;
+          service = "garage-health-svc";
+          tls.options = "tls-opts@file";
+        };
+        services.garage-health-svc.loadBalancer.servers = [
+          { url = "http://garage:${toString adminPort}"; }
+        ];
+      };
     };
 
     fleet.imageUpdates.garage.ceremony = "every app's files live in it, and a newer Garage cannot be downgraded once it has opened the store — the only way back from a bad bump is forward";
