@@ -47,7 +47,9 @@ struct OverviewView: View {
                     }
                     .padding(.top, 80)
                 } else {
-                    ProgressView().padding(.top, 120)
+                    // Full width: a scroll view is only as wide as what it holds, and its
+                    // grey background would otherwise be a band behind the spinner.
+                    ProgressView().padding(.top, 120).frame(maxWidth: .infinity)
                 }
             }
             .background(Color(uiColor: .systemGroupedBackground))
