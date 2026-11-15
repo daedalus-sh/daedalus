@@ -99,7 +99,7 @@ let
   # digest (`skopeo inspect --no-tags --format '{{.Digest}}'
   # docker://docker.io/library/node:<tag>`). Bump by hand, with a
   # candidate build of a Dockerfile-strategy app before any live one.
-  nodeImage = "docker.io/library/node:26.12.1-slim@sha256:36793bcbb160a6a16cede1e62b93f84e26b78a972a8a4c0b879c1c12f22761ec";
+  nodeImage = "docker.io/library/node:26.13.1-slim@sha256:e6bedef217677b276c591795e169840edd9096dbf13f29df8ef8d1856b8820bc";
 
   # The PATH of every process build.sh runs as the build user: its environment
   # is rebuilt from nothing, so this is all it gets.

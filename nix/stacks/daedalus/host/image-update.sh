@@ -555,7 +555,14 @@ while read -r m to_digest; do
   if [ -z "$running" ]; then
     bad="$bad $m(no container)"
   elif [ "$running" != "$to_digest" ]; then
-    bad="$bad $m(running $running)"
+    # A tag re-published for another platform gets a new index digest over
+    # the SAME image for this one. podman then keeps one image with both
+    # digests and reports the first it stored, so ask the image the
+    # container runs whether the new digest is one of its names.
+    id="$(podman_ container inspect "$m" --format '{{.Image}}' </dev/null 2>/dev/null || true)"
+    podman_ image inspect "$id" </dev/null 2>/dev/null |
+      jq -e --arg d "@$to_digest" 'any(.[0].RepoDigests[]?; endswith($d))' >/dev/null ||
+      bad="$bad $m(running $running)"
   fi
 done < <(jq -r '.[] | select(.changed) | [.container, .toDigest] | @tsv' <<<"$MOVES")
 
