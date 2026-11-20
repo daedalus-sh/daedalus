@@ -163,7 +163,28 @@ as_operator podman exec -i pg pg_restore -U postgres -d foo --clean --if-exists 
 ```
 
 ZFS snapshots of the state dataset also cover the cluster data dir at
-`<stateRoot>/app-db/postgres`. Browse via `.zfs/snapshot/…`.
+`<stateRoot>/app-db/postgres<major>`. Browse via `.zfs/snapshot/…`.
+
+## A new major
+
+A new major will not open the old data dir, so it is a dump and restore
+into a new dir named for the major (`pgMajor` in `app-db.nix`), with the
+old dir left as the way back:
+
+1. Build the new image by hand from `assets/pg-image` with the new base
+   as `BASE`, and stop `podman-pg` (the tenants lose the cluster here).
+2. Start the old image on the old dir and the new one on an empty
+   `postgres<new>` (owner 100069, mode 0700), both `--network none`, the
+   new one with the cluster env file (`--env-file`) so initdb uses the same
+   superuser. Share the old one's socket dir with the new container.
+3. `pg_dumpall` from the new container through the old socket, piped to
+   `psql` on the new one. The only expected error is `role "postgres"
+   already exists`.
+4. Compare both: databases, roles, extensions and an exact row count per
+   table, which must match.
+5. Stop both, move `pgBase` and `pgMajor` together, lock-bump and
+   rebuild; then the pg cascade (pocket-id, healthchecks). Delete the old
+   dir once the fleet has run on the new one for a while.
 
 ## Remove an app cleanly
 
@@ -232,5 +253,5 @@ nix/modules/app-db/         (the engine)
                     # key the stock images read
 
 <stateRoot>/app-db/
-└── postgres/           # bind-mounted into pg:/var/lib/postgresql/data
+└── postgres<major>/    # bind-mounted into pg:/var/lib/postgresql/data (pgMajor)
 ```

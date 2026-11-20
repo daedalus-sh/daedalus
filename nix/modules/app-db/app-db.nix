@@ -10,9 +10,9 @@
 # is non-empty (declaring an entry IS the enable signal — a cluster with no
 # tenant is not started). Materializes:
 #
-#   - One `pg` container (`postgres:18.7-alpine` with pgvector, built on the
+#   - One `pg` container (`postgres:19.0-alpine` with pgvector, built on the
 #     box from assets/pg-image) on the shared `app-db-net` bridge. Data at
-#     <stateRoot>/app-db/postgres, owner 100069:100069 (in-container UID 70
+#     <stateRoot>/app-db/postgres<major>, owner 100069:100069 (in-container UID 70
 #     = postgres mapped through the operator's subuid range).
 #   - `app-db-cluster-bootstrap.service` — one-time, generates the cluster
 #     superuser POSTGRES_PASSWORD into
@@ -95,7 +95,11 @@ let
   appEnvFile = name: "${envBase}/${name}/env";
 
   hostRoot = "${config.fleet.stateRoot}/app-db";
-  dataDir = "${hostRoot}/postgres";
+  # Named for its major: a new major cannot open the old data dir, so it is
+  # restored into a new one and the old dir stays as the way back (README,
+  # "A new major"). Major 18 lived in the unsuffixed `postgres`.
+  pgMajor = "19";
+  dataDir = "${hostRoot}/postgres${pgMajor}";
 
   # Locally-built postgres image with pgvector compiled in (see
   # assets/pg-image/Containerfile). The base must stay Alpine: its
@@ -108,9 +112,9 @@ let
   # `extensions` (see the submodule below).
   #
   # The base pin, bumped by hand in the engine and listed on System ›
-  # Updates. A patch or minor is this edit; a MAJOR is not — the data dir
-  # needs pg_upgrade first.
-  pgBase = "docker.io/library/postgres:18.7-alpine@sha256:ff64c9e3bdf8e2120107d3559de8db314e8305f7e38c5105903c6295876738ff";
+  # Updates. A patch or minor is this edit; a MAJOR also moves `pgMajor`,
+  # after the README's dump/restore into the new dir.
+  pgBase = "docker.io/library/postgres:19.0-alpine@sha256:8b0ff4cdf221f0c53d7fcda681d3b461be725c492cd881c5ec9c0ad25023f188";
   pgImageBuild = mkLocalImage {
     name = "pg-pgvector";
     bases.BASE = pgBase;
@@ -343,7 +347,7 @@ in
     fleet.manualPins = lib.mkMerge [
       pgImageBuild.pins
       {
-        pg-pgvector.note = "A major needs pg_upgrade of the data dir first; any bump restarts pg, which pocket-id does not survive.";
+        pg-pgvector.note = "A major is a dump/restore into a new data dir (README); any bump restarts pg, which pocket-id does not survive.";
       }
     ];
 
@@ -514,7 +518,7 @@ in
       inherit (pgImageBuild) image;
       environmentFiles = [ clusterEnv ];
       environment = {
-        # Postgres 18 default PGDATA is /var/lib/postgresql/<major>/docker
+        # Postgres 18+ default PGDATA is /var/lib/postgresql/<major>/docker
         # for pg_upgrade ergonomics; we mount at the legacy path and pin
         # PGDATA so initdb doesn't bail with "unused mount/volume".
         PGDATA = "/var/lib/postgresql/data";
