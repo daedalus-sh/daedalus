@@ -18,7 +18,9 @@ import { wanHost } from './shared'
 //
 // Everything about what is CURRENT comes from Wube, unauthenticated:
 //
-//   /api/latest-releases          stable + experimental, per build
+//   /api/latest-releases          stable, per build (experimental is ignored:
+//                                 this server follows stable, which is what
+//                                 Steam hands every client by default)
 //   updater.../get-available-versions
 //                                 the whole upgrade graph, which is what lets
 //                                 this count the releases between the pinned
@@ -33,7 +35,6 @@ export type FactorioData = {
     /** Pinned in nix, downloaded on every container start — so, running. */
     installed: string | null
     stable: string | null
-    experimental: string | null
     /** Releases between `installed` and `stable`, oldest first. */
     behind: string[]
     /** How the game is reached, which is not through traefik. */
@@ -80,42 +81,23 @@ export type FactorioData = {
     /** True when the section lists were cut — see CHANGELOG_MAX_ITEMS. */
     truncated: boolean
   }[]
-  /** Where the version can move: stable first, then experimental when it is ahead. */
+  /** Where the version can move: Wube's stable, when it is past the pin. */
   options: FactorioOption[]
   /** The version-update bridge, so a page opened mid-update joins the run. */
   versionStatus: VersionUpdateStatus
 }
 
 /** One version the server can move to. */
-export type FactorioOption = {
-  version: string
-  channel: 'stable' | 'experimental'
-}
+export type FactorioOption = { version: string }
 
 /**
- * The moves worth offering: Wube's stable when it is past the pin, and its
- * experimental when that is past both. Stable is what Steam hands a client
- * by default, so it is the one that keeps everybody able to join; an
- * experimental server turns away every client still on stable.
+ * The one move worth offering: Wube's stable, when it is past the pin. Stable
+ * is what Steam hands a client by default, so it keeps everybody able to join;
+ * experimental is not offered at all.
  */
-export function factorioOptions(
-  installed: string | null,
-  stable: string | null,
-  experimental: string | null,
-): FactorioOption[] {
-  if (installed === null) return []
-  const out: FactorioOption[] = []
-  if (stable !== null && compareVersions(stable, installed) > 0) {
-    out.push({ version: stable, channel: 'stable' })
-  }
-  if (
-    experimental !== null &&
-    compareVersions(experimental, installed) > 0 &&
-    (stable === null || compareVersions(experimental, stable) > 0)
-  ) {
-    out.push({ version: experimental, channel: 'experimental' })
-  }
-  return out
+export function factorioOptions(installed: string | null, stable: string | null): FactorioOption[] {
+  if (installed === null || stable === null) return []
+  return compareVersions(stable, installed) > 0 ? [{ version: stable }] : []
 }
 
 /**
@@ -152,9 +134,7 @@ export async function loadFactorio(ctx: Ctx): Promise<FactorioData> {
 
   const { readVersionUpdateStatus } = await import('../../../host/version-update')
   const [releases, graph, feed, containerUp, gameLog, versionStatus] = await Promise.all([
-    getJson<{ stable?: { headless?: string }; experimental?: { headless?: string } }>(
-      'https://factorio.com/api/latest-releases',
-    ),
+    getJson<{ stable?: { headless?: string } }>('https://factorio.com/api/latest-releases'),
     getJson<Record<string, ({ from?: string; to?: string } & { stable?: string })[]>>(
       'https://updater.factorio.com/get-available-versions',
     ),
@@ -165,7 +145,6 @@ export async function loadFactorio(ctx: Ctx): Promise<FactorioData> {
   ])
 
   const stable = releases?.stable?.headless ?? null
-  const experimental = releases?.experimental?.headless ?? null
   const behind = chain(graph?.['core-linux_headless64'] ?? [], installed, stable)
 
   // Fetched only for the releases actually shown. Nothing behind means the
@@ -177,7 +156,6 @@ export async function loadFactorio(ctx: Ctx): Promise<FactorioData> {
     factorio: {
       installed,
       stable,
-      experimental,
       behind,
       // NOT the admin hostname: the game speaks its own UDP protocol straight
       // to the router-forwarded port and never touches traefik. The DDNS name
@@ -196,7 +174,7 @@ export async function loadFactorio(ctx: Ctx): Promise<FactorioData> {
     events: gameLog.events,
     news: feed,
     changelog,
-    options: factorioOptions(installed, stable, experimental),
+    options: factorioOptions(installed, stable),
     versionStatus,
   }
 }

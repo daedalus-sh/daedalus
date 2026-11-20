@@ -1,14 +1,13 @@
 // The Access tab's boards: where requests came from, who sent them, what
 // they asked for, and what was refused.
 
-import type { ReactNode } from 'react'
+import { type ReactNode, useEffect, useState } from 'react'
 import type { AccessWindow } from '../../lib/access-window'
 import { cn } from '../../lib/cn'
 import { num } from '../../lib/format'
-import { useScheme } from '../../lib/scheme'
 import { useSite } from '../../lib/site-context'
 import { type Tone, toneStyle } from '../../lib/tone'
-import { CAPTION, EMPTY, FOOT } from '../tokens'
+import { EMPTY, FOOT } from '../tokens'
 import { Button } from '../ui/button'
 import { Board } from '../viz'
 import type { AccessData } from './access'
@@ -173,38 +172,44 @@ export function RejectsBoard({
 }
 
 /**
- * The App access dashboard's geomap, pinned to one host.
+ * Where this host's remote requests came from, drawn here.
  *
- * A real Grafana panel in an iframe rather than a map rebuilt here. Grafana
- * already owns the projection, the basemap and the ISO-code gazetteer that
- * turns `Cf-Ipcountry` into a coordinate, and none of that is worth a second
- * implementation. The dashboard
- * (`nix/modules/monitoring/assets/dashboards/System/app-access.json`) carries a `$host` variable for exactly this; the same dashboard opened
- * without one is the fleet-wide view.
+ * Shaded from `access.geo`, the same Cf-Ipcountry counts the Countries board
+ * lists, over Natural Earth outlines baked into world-map.json
+ * (scripts/world-map.mjs). It used to be the App access dashboard's Grafana
+ * geomap in an iframe, which came back as Pocket ID's refusal to be framed
+ * whenever the browser held no Grafana session, i.e. most of the time.
  *
- * Two things had to be true for this to work, and both live in
- * nix/modules/monitoring: grafana no longer sends `X-Frame-Options: deny`
- * (GF_SECURITY_ALLOW_EMBEDDING), and the narrower `frame-ancestors` CSP that
- * replaced it names daedalus. daedalus and grafana are both under
- * the base domain, so they are same-site and grafana's session cookie rides along
- * with the frame load — no second sign-in, no anonymous access.
- *
- * The caveat is that first load. Grafana auto-logs-in through Pocket ID, and
- * the IdP refuses to be framed, so with no live grafana session the frame
- * comes back empty. A cross-origin frame cannot be inspected for that, so
- * there is no detecting it and swapping in a message — hence the standing
- * link below rather than a conditional one.
+ * The outlines are a lazy chunk (~120 kB), so the frame holds its size until
+ * they arrive. Shade is log-scaled: one country usually dominates, and a linear
+ * scale would leave every other country at the floor.
  */
-export function GeoPanel({ hostname, range }: { hostname: string; range: AccessWindow }) {
-  const scheme = useScheme()
+export function GeoPanel({
+  access,
+  hostname,
+  range,
+}: {
+  access: AccessData
+  hostname: string
+  range: AccessWindow
+}) {
   const { grafanaUrl } = useSite()
-  const src =
-    `${grafanaUrl}/d-solo/s2-app-access/app-access` +
-    `?panelId=1&var-host=${encodeURIComponent(hostname)}` +
-    `&from=now-${range}&to=now&theme=${scheme}` +
-    // The dashboard's basemap is a variable for exactly this: Esri ships its
-    // canvas in a dark and a light grey, and the theme alone does not swap them.
-    `&var-basemap=${scheme === 'light' ? 'Light' : 'Dark'}`
+  const [map, setMap] = useState<WorldMap | null>(null)
+  useEffect(() => {
+    let live = true
+    void import('./world-map.json').then((m) => {
+      if (live) setMap(m.default as WorldMap)
+    })
+    return () => {
+      live = false
+    }
+  }, [])
+
+  const counts = new Map(access.geo.map((g) => [g.code, g.count]))
+  const max = Math.max(1, ...counts.values())
+  const shade = (n: number) => 0.25 + 0.75 * (Math.log(n + 1) / Math.log(max + 1))
+  const label = (name: string, n: number | undefined) =>
+    n === undefined ? name : `${name}: ${num(n)} request${n === 1 ? '' : 's'}`
 
   return (
     <Board
@@ -224,33 +229,64 @@ export function GeoPanel({ hostname, range }: { hostname: string; range: AccessW
         </Button>
       }
     >
-      {/* Fixed height because the iframe's content cannot size its own box
-          from outside, and short on phones where a full-height map would push
-          everything below it off the screen. */}
-      <iframe
-        // Keyed on the scheme so a theme change remounts the frame rather than
-        // mutating its src, which would add a Grafana entry to the history.
-        key={scheme}
-        className="block h-96 w-full rounded-xl border border-hairline bg-foreground/[0.04] [color-scheme:light] dark:[color-scheme:dark] max-[34rem]:h-60"
-        src={src}
-        title={`Remote requests to ${hostname} by country`}
-      />
-      <p className={CAPTION}>
-        Rendered by Grafana. A blank map means this browser has no Grafana session yet. Open it{' '}
-        <a href={grafanaUrl} target="_blank" rel="noreferrer">
-          once
-        </a>{' '}
-        and it will fill in.
-      </p>
+      <div className="aspect-[1000/487] w-full">
+        {map !== null && (
+          <svg
+            viewBox={map.viewBox}
+            className="block h-full w-full"
+            role="img"
+            aria-label={`Remote requests to ${hostname} by country`}
+          >
+            {Object.entries(map.countries).map(([code, c]) => {
+              const n = counts.get(code)
+              return (
+                <path
+                  key={code}
+                  d={c.d}
+                  className={cn(
+                    'stroke-background [stroke-width:0.5]',
+                    n === undefined ? 'fill-foreground/[0.08]' : 'fill-primary',
+                  )}
+                  fillOpacity={n === undefined ? undefined : shade(n)}
+                >
+                  <title>{label(c.name, n)}</title>
+                </path>
+              )
+            })}
+            {Object.entries(map.dots).map(([code, c]) => {
+              const n = counts.get(code)
+              if (n === undefined) return null
+              return (
+                <circle
+                  key={code}
+                  cx={c.x}
+                  cy={c.y}
+                  r={3.5}
+                  className="fill-primary stroke-background [stroke-width:1]"
+                  fillOpacity={shade(n)}
+                >
+                  <title>{label(c.name, n)}</title>
+                </circle>
+              )
+            })}
+          </svg>
+        )}
+      </div>
       <p className={FOOT}>{ACCESS_NOTE}</p>
     </Board>
   )
 }
 
+type WorldMap = {
+  viewBox: string
+  countries: Record<string, { name: string; d: string }>
+  dots: Record<string, { name: string; x: number; y: number }>
+}
+
 /** What this tab counts and where its map comes from. Folds behind the map's ⓘ, and the
     empty board's when there is nothing to map. */
 export const ACCESS_NOTE =
-  'Only tunnel traffic is counted. Loki keeps 30 days, so that is the longest window there is. The map is a Grafana panel from the App access dashboard, filtered to this host; the link on the rejected-requests board opens the fleet-wide Security dashboard instead.'
+  'Only tunnel traffic is counted. Loki keeps 30 days, so that is the longest window there is. The map counts the same Cf-Ipcountry header as the Countries board, and its Grafana link opens the App access dashboard filtered to this host; the link on the rejected-requests board opens the fleet-wide Security dashboard instead.'
 
 /** Status code, coloured by class. Keyed on the first digit so a code the
     dashboard has never seen still lands in the right bucket. */

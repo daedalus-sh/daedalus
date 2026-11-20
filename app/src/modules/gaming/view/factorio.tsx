@@ -47,11 +47,6 @@ export function FactorioView({ data }: { data: Extract<GamingData, { tab: 'facto
             v: factorio.stable,
             note: current ? 'this is what is running' : 'what this server should be on',
           },
-          {
-            k: 'Experimental',
-            v: factorio.experimental,
-            note: 'not tracked, since this server follows stable',
-          },
         ]}
         lede={
           <>

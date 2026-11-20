@@ -16,8 +16,8 @@ type Move = { version: string; build: string | null; channel: string; note: stri
 const factorioMove = (o: FactorioOption): Move => ({
   version: o.version,
   build: null,
-  channel: o.channel,
-  note: o.channel === 'experimental' ? 'clients on stable cannot join' : null,
+  channel: 'stable',
+  note: null,
 })
 
 const minecraftMove = (o: VersionOption): Move => ({
@@ -35,7 +35,7 @@ async function factorioState(ctx: Ctx) {
   const d = await loadFactorio(ctx)
   return {
     pinned: { version: d.factorio.installed, build: null },
-    latest: { stable: d.factorio.stable, experimental: d.factorio.experimental },
+    latest: { stable: d.factorio.stable },
     gameRunning: d.live.game === null ? null : d.live.game === 'running',
     moves: d.options.map(factorioMove),
     notes: d.changelog,

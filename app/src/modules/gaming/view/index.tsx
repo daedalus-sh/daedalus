@@ -16,7 +16,7 @@ import { MinecraftView } from './minecraft'
 // ── one number on the page, and its comparisons on demand ─────────────────
 //
 // The running version is the only one stated outright. What the vendor calls
-// current (Wube's stable and experimental, Mojang's latest release) is what
+// current (Wube's stable, Mojang's latest release) is what
 // it is measured AGAINST, not a fact about this server, and as headline
 // cards those read as unrelated versions competing for the same glance. They
 // live in ServiceHead's `compare`, behind the verdict chip that already says

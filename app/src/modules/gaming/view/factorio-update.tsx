@@ -56,7 +56,7 @@ export function FactorioVersionBoard({
       }
     >
       {options.length === 0 ? (
-        <p className={EMPTY}>nothing newer to move to: this server is on Wube's newest release</p>
+        <p className={EMPTY}>nothing newer to move to: this server is on Wube's stable release</p>
       ) : (
         <fieldset className="m-0 flex min-w-0 flex-col gap-1.5 border-0 p-0">
           <legend className="sr-only">Version to move to</legend>
@@ -82,8 +82,7 @@ export function FactorioVersionBoard({
                 }}
               />
               <span className={cn(MONO, 'text-[0.875rem] text-foreground')}>{o.version}</span>
-              <Chip tone={o.channel === 'stable' ? 'ok' : 'warn'}>{o.channel}</Chip>
-              {o.channel === 'stable' && <Chip tone="ok">recommended</Chip>}
+              <Chip tone="ok">stable</Chip>
             </label>
           ))}
         </fieldset>
@@ -96,8 +95,6 @@ export function FactorioVersionBoard({
               <strong>Clients must match.</strong> A Factorio client joins only a server on its own
               version, so anyone still on {installed ?? 'the old version'} is turned away until
               their game updates.
-              {chosen.channel === 'experimental' &&
-                ' Steam keeps players on stable unless each one opts into the experimental branch, so most clients will not match.'}
             </p>
             <p className="m-0 mt-1.5 text-[0.8rem]">
               <strong>One way for saves.</strong> The update does not start a game. The first time{' '}

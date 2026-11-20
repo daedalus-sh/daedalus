@@ -173,7 +173,7 @@ export function Access({
         </BoardGrid>
       ) : (
         <BoardGrid>
-          <GeoPanel hostname={hostname} range={range} />
+          <GeoPanel access={access} hostname={hostname} range={range} />
 
           {/* The two lists stacked beside the map: Countries is a couple of
               rows, so alone it was a tall board with nothing in it. */}
