@@ -97,6 +97,6 @@ export const manifest = {
     // The coding-agent server a host stack runs over the same workspaces: the
     // threads it holds, the devices paired to it. The one tab here that is a
     // module the box can switch off, so the one with `nix`.
-    { id: 't3code', label: 'T3 Code', boardSpans: [12, 12, 6, 6, 12], nix: 't3code' },
+    { id: 't3code', label: 'T3 Code', boardSpans: [12, 12, 12, 6, 6, 12], nix: 't3code' },
   ],
 } as const satisfies ModuleManifest

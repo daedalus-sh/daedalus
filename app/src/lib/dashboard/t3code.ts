@@ -13,6 +13,7 @@
 
 import type { Ctx } from '../../core/ctx'
 import type { SnapshotResult } from '../../host/contract/snapshot'
+import type { VersionUpdateStatus } from '../../host/version-update'
 import {
   arrayOf,
   bool,
@@ -74,6 +75,28 @@ export type T3Counts = {
   failed: number
 }
 
+/** The six lines of the host's pin (fleet.versionPins.t3code), as the version-update agent takes them. */
+export type T3PinValues = {
+  version: string
+  rev: string
+  srchash: string
+  pnpmhash: string
+  chromeversion: string
+  chromehash: string
+}
+
+/** What the host's hourly resolver found: the pin is the newest release, or a newer one with its values. */
+export type T3Update =
+  | { current: true; version: string; checkedAt: string | null }
+  | {
+      current: false
+      version: string
+      checkedAt: string | null
+      /** Why it cannot be built yet, in the host's words. Null: ready. */
+      blocked: string | null
+      values: T3PinValues
+    }
+
 export type T3Status = {
   generatedAt: string
   /** The server answered its own descriptor. False: everything below is empty. */
@@ -93,6 +116,8 @@ export type T3Status = {
   recent: T3Thread[]
   devices: T3Device[]
   pendingPairings: number
+  /** Null: the resolver has not run, or what it wrote is not a shape this page forwards. */
+  update: T3Update | null
 }
 
 export type T3Reading = {
@@ -111,6 +136,10 @@ export type T3CodeData = {
   installed: string | null
   reading: T3Reading
   gap: VersionGap
+  /** The host's version-update run, as the Update button's progress starts from. */
+  versionStatus: VersionUpdateStatus
+  /** What a restart ends, by this reading; the confirm asks again as it arms. */
+  restartConfirm: string
 }
 
 /** Five missed runs of a two-minute timer. */
@@ -171,6 +200,59 @@ const device: Decoder<T3Device> = obj({
   fullAccess: optional(bool, false),
 })
 
+/** The patterns the host declares for each field of the pin, anchored. */
+const PIN_PATTERNS: Record<keyof T3PinValues, RegExp> = {
+  version: /^\d+\.\d+\.\d+$/,
+  rev: /^[0-9a-f]{40}$/,
+  srchash: /^[0-9a-z]{52}$/,
+  pnpmhash: /^[0-9a-z]{52}$/,
+  chromeversion: /^\d+(\.\d+){3}$/,
+  chromehash: /^[0-9a-z]{52}$/,
+}
+const PIN_FIELDS = Object.keys(PIN_PATTERNS) as (keyof T3PinValues)[]
+
+const record = (v: unknown): Record<string, unknown> | null =>
+  typeof v === 'object' && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : null
+
+/** Exactly the six fields, each to its pattern; anything else is no values at all. */
+function pinValues(v: unknown): T3PinValues | null {
+  const o = record(v)
+  if (o === null || Object.keys(o).length !== PIN_FIELDS.length) return null
+  const out: Partial<T3PinValues> = {}
+  for (const k of PIN_FIELDS) {
+    const x = o[k]
+    if (typeof x !== 'string' || !PIN_PATTERNS[k].test(x)) return null
+    out[k] = x
+  }
+  return out as T3PinValues
+}
+
+/**
+ * Never throws: the update is the one part of the document the page sends
+ * back to the host, so one that does not match is dropped (read as "no
+ * check") and the rest of the reading stands.
+ */
+const update: Decoder<T3Update | null> = (v) => {
+  const o = record(v)
+  if (o === null) return null
+  const { version, current, checkedAt, blocked } = o
+  if (typeof version !== 'string' || !PIN_PATTERNS.version.test(version)) return null
+  const at = typeof checkedAt === 'string' ? checkedAt : null
+  if (current === true) return { current: true, version, checkedAt: at }
+  if (current !== false) return null
+  if (blocked !== undefined && blocked !== null && typeof blocked !== 'string') return null
+  const values = pinValues(o.values)
+  // The button names `version`; the values must be that release's.
+  if (values === null || values.version !== version) return null
+  return {
+    current: false,
+    version,
+    checkedAt: at,
+    blocked: typeof blocked === 'string' && blocked !== '' ? blocked : null,
+    values,
+  }
+}
+
 const document = obj({
   // The version comes first, so another version fails on its version and
   // not on a field it moved.
@@ -206,6 +288,7 @@ const document = obj({
   recent: optional(arrayOf(thread), []),
   devices: optional(arrayOf(device), []),
   pendingPairings: optional(num, 0),
+  update: optional(update, null),
 })
 
 export const t3Status: Decoder<T3Status> = document
@@ -228,12 +311,42 @@ export async function readT3Code(ctx: Pick<Ctx, 'env' | 'snapshot'>): Promise<T3
   return readingOf(r, Date.now())
 }
 
+const count = (n: number, one: string) => `${String(n)} ${one}${n === 1 ? '' : 's'}`
+const be = (n: number) => (n === 1 ? 'is' : 'are')
+
+/**
+ * What the Restart confirm says: the threads a restart ends, by this reading.
+ * Terminals are not in the status file, so they are named and never counted.
+ */
+export function restartConfirm(r: T3Reading): string {
+  const s = r.status
+  if (s === null || r.stale || !s.reachable || !s.reader) {
+    return 'How many threads are running is not known right now. Restarting the server ends every one that is, and every open terminal.'
+  }
+  const { running, waiting } = s.counts
+  if (running === 0 && waiting === 0) {
+    return 'No thread is running or waiting right now. Restarting the server still ends every open terminal.'
+  }
+  const threads =
+    running > 0 && waiting > 0
+      ? `${count(running, 'thread')} ${be(running)} running and ${String(waiting)} ${be(waiting)} waiting on an answer`
+      : running > 0
+        ? `${count(running, 'thread')} ${be(running)} running`
+        : `${count(waiting, 'thread')} ${be(waiting)} waiting on an answer`
+  const them = running + waiting === 1 ? 'it' : 'them'
+  return `${threads} right now. Restarting the server ends ${them} and every open terminal.`
+}
+
 const orNull = (s: string | undefined): string | null => (s === undefined || s === '' ? null : s)
 
 export async function loadT3Code(
-  ctx: Pick<Ctx, 'env' | 'snapshot' | 'hosts'>,
+  ctx: Pick<Ctx, 'env' | 'snapshot' | 'hosts' | 'controller'>,
 ): Promise<T3CodeData> {
-  const reading = await readT3Code(ctx)
+  const { readVersionUpdateStatus } = await import('../../host/version-update')
+  const [reading, versionStatus] = await Promise.all([
+    readT3Code(ctx),
+    readVersionUpdateStatus(ctx),
+  ])
   const installed = orNull(ctx.env('T3CODE_VERSION')) ?? orNull(reading.status?.installedVersion)
   // What the RUNNING server said it is, in preference to what nix installed:
   // the two differ from a rebuild until the server's next restart.
@@ -241,7 +354,14 @@ export async function loadT3Code(
   // The default tag pattern is anchored (vX.Y.Z), which is what keeps the
   // project's nightly tags (vX.Y.Z-nightly.…) out of the release list.
   const gap = await versionGap('pingdotgg/t3code', reading.status?.server?.version ?? installed)
-  return { url: ctx.hosts.base('t3code'), installed, reading, gap }
+  return {
+    url: ctx.hosts.base('t3code'),
+    installed,
+    reading,
+    gap,
+    versionStatus,
+    restartConfirm: restartConfirm(reading),
+  }
 }
 
 // ⚠ Views import TYPES only from here — see the foot of dashboard/claude.ts.

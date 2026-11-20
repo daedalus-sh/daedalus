@@ -1,7 +1,8 @@
 // The T3 Code tab: the coding-agent server a host stack runs over the box's
 // workspaces — its threads, its projects, and who holds a session on it.
 //
-// One file per board: threads, devices, projects; facts.ts holds the pure
+// One file per board: threads, devices, projects, the pinned release
+// (update.tsx); restart.tsx is the head's Restart; facts.ts holds the pure
 // derivations. Everything is read from one status file the host writes every
 // two minutes, so the page works with the server down, and says so: the head
 // and the logs never depend on the reading.
@@ -13,20 +14,32 @@ import { Ago } from '../ago'
 import { LogBoard } from '../logs'
 import { Changelog } from '../release-notes'
 import { ServiceHead } from '../service-head'
-import { CAPTION, EMPTY, FOOT, MONO, NOTE } from '../tokens'
+import { CAPTION, EMPTY, FOOT, NOTE } from '../tokens'
 import { Button } from '../ui/button'
 import { BoardGrid, Stat, StatStrip } from '../viz'
 import { DevicesBoard } from './devices'
-import { GAP_SUB, isBot, type T3Facts, t3Facts, t3Verdict, type Verdict } from './facts'
+import {
+  GAP_SUB,
+  isBot,
+  restartPending,
+  type T3Facts,
+  t3Facts,
+  t3Verdict,
+  type Verdict,
+} from './facts'
 import { ProjectsBoard } from './projects'
+import { RestartButton, RestartStep, type T3Restart, useT3Restart } from './restart'
 import { ThreadsBoard } from './threads'
+import { T3UpdateBoard } from './update'
 
 export function T3CodeView({ data }: { data: T3CodeData }) {
   const f = t3Facts(data)
   const verdict = t3Verdict(f)
+  const restart = useT3Restart(data.restartConfirm)
   return (
     <>
-      <T3Head f={f} verdict={verdict} />
+      <T3Head f={f} verdict={verdict} restart={restart} />
+      <RestartStep r={restart} />
       <ReadingNotice f={f} />
       <T3Stats f={f} />
 
@@ -34,6 +47,7 @@ export function T3CodeView({ data }: { data: T3CodeData }) {
         <ThreadsBoard f={f} />
         <DevicesBoard f={f} />
         <BoardGrid>
+          <T3UpdateBoard f={f} />
           <ProjectsBoard f={f} />
           <T3Releases f={f} verdict={verdict} />
           <T3Logs />
@@ -43,8 +57,9 @@ export function T3CodeView({ data }: { data: T3CodeData }) {
   )
 }
 
-function T3Head({ f, verdict }: { f: T3Facts; verdict: Verdict }) {
+function T3Head({ f, verdict, restart }: { f: T3Facts; verdict: Verdict; restart: T3Restart }) {
   const { data, running } = f
+  const pending = restartPending(f)
   return (
     <ServiceHead
       logo="/icon-t3code.svg"
@@ -63,10 +78,9 @@ function T3Head({ f, verdict }: { f: T3Facts; verdict: Verdict }) {
         {
           k: 'Installed',
           v: data.installed,
-          note:
-            running !== null && data.installed !== null && running !== data.installed
-              ? 'a rebuild installed this; restarting the server applies it'
-              : 'what the last rebuild installed',
+          note: pending
+            ? 'a rebuild installed this; Restart applies it'
+            : 'what the last rebuild installed',
         },
         {
           k: 'Latest release',
@@ -82,11 +96,14 @@ function T3Head({ f, verdict }: { f: T3Facts; verdict: Verdict }) {
         </>
       }
       actions={
-        <Button asChild variant="outline" size="sm">
-          <a href={data.url} target="_blank" rel="noreferrer">
-            ↗ Open
-          </a>
-        </Button>
+        <>
+          <RestartButton r={restart} pending={pending} />
+          <Button asChild variant="outline" size="sm">
+            <a href={data.url} target="_blank" rel="noreferrer">
+              ↗ Open
+            </a>
+          </Button>
+        </>
       }
     />
   )
@@ -201,11 +218,11 @@ function T3Releases({ f, verdict }: { f: T3Facts; verdict: Verdict }) {
       foot={
         <>
           <p className={FOOT}>
-            The build is a pin, on System › Updates. A rebuild installs a new one and leaves the
-            running server alone, because every agent turn and terminal is its child: restarting{' '}
-            <span className={MONO}>t3code.service</span> applies it, when nothing is mid-turn. The
-            web client is served by the server, so the two never differ. Nightly builds are not
-            counted as releases.
+            The build is a pin, moved from Pinned release above. A rebuild installs a new one and
+            leaves the running server alone, because every agent turn and terminal is its child:
+            Restart, at the top of this page, applies it, when nothing is mid-turn. The web client
+            is served by the server, so the two never differ. Nightly builds are not counted as
+            releases.
           </p>
           {verdict.note !== '' && <p className={CAPTION}>{verdict.note}</p>}
         </>

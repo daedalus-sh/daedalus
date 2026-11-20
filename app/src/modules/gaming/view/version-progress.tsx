@@ -5,10 +5,10 @@ import type { VersionUpdateStatus } from '../../../host/version-update'
 import { cn } from '../../../lib/cn'
 import { REBOOT_REQUIRED } from '../../../lib/reboot-required'
 
-// What both game tabs' version boards share: the option rows, the confirm
-// box, and the run as drawn under the button. The host agent is one
-// (host/version-update.ts), so a run of the other game is not this tab's to
-// report.
+// What the version boards share: the option rows, the confirm box, and the
+// run as drawn under the button. The host agent is one
+// (host/version-update.ts), so a run of another target is not this tab's to
+// report. System › T3 Code draws its run with this too.
 
 export const OPTION = cn(
   'flex w-full min-w-0 cursor-pointer items-center gap-2.5 rounded-xl border px-3 py-2 text-left transition-colors',
@@ -35,20 +35,24 @@ export function VersionProgress({
   status: s,
   running,
   refusal,
+  phases,
 }: {
   /** The fleet.versionPins id this tab moves. */
   target: string
   status: VersionUpdateStatus
   running: boolean
   refusal: string | null
+  /** A phase said differently for this target: one whose switch restarts nothing, say. */
+  phases?: Record<string, string>
 }) {
+  const phase = (p: string) => phases?.[p] ?? PHASE[p] ?? p
   if (refusal !== null) return <p className={cn(NOTE, 'm-0 text-danger')}>{refusal}</p>
   if (s.id === null || s.target !== target) return null
   const moved = s.moves.map((m) => `${m.field} ${m.from} → ${m.to}`).join(', ')
   if (running || s.state === 'running') {
     return (
       <p className={cn(NOTE, 'm-0')}>
-        {PHASE[s.phase] ?? s.phase}…{moved === '' ? '' : ` (${moved})`}
+        {phase(s.phase)}…{moved === '' ? '' : ` (${moved})`}
       </p>
     )
   }
@@ -78,7 +82,7 @@ export function VersionProgress({
     return (
       <Alert variant="destructive">
         <AlertTitle>
-          The update failed while {PHASE[s.phase] ?? s.phase}
+          The update failed while {phase(s.phase)}
           {s.rolledBack ? ', and was rolled back' : ''}.
         </AlertTitle>
         <AlertDescription>

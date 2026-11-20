@@ -1,7 +1,7 @@
 // What the T3 Code boards read off one payload. Pure, and beside the view:
 // lib/dashboard/t3code is server-only, so the page takes its types alone.
 
-import type { T3CodeData, T3Device, T3Status } from '../../lib/dashboard/t3code'
+import type { T3CodeData, T3Device, T3PinValues, T3Status } from '../../lib/dashboard/t3code'
 import type { Tone } from '../../lib/tone'
 
 /** Why there is nothing current to draw, or null when the reading is live. */
@@ -57,7 +57,7 @@ export function t3Verdict(f: T3Facts): Verdict {
     return {
       label: 'restart pending',
       tone: 'warn',
-      note: `${installed} is installed and the running server is ${f.running}. A rebuild never restarts it, because every thread and terminal would end with it; restarting the server applies the new build.`,
+      note: `${installed} is installed and the running server is ${f.running}. A rebuild never restarts it, because every thread and terminal would end with it. Restart, at the top of this page, applies the new build.`,
     }
   }
   if (gap.installed === null) return { label: 'unknown', tone: 'muted', note: '' }
@@ -72,6 +72,33 @@ export function t3Verdict(f: T3Facts): Verdict {
         tone: 'warn',
         note: '',
       }
+}
+
+/** A build is installed that the running server is not on: what Restart is for. */
+export const restartPending = (f: T3Facts): boolean =>
+  f.running !== null && f.data.installed !== null && f.running !== f.data.installed
+
+/** What the Pinned release board says, and whether it offers a button. */
+export type Offer =
+  /** No document, or one from a server that is down, which carries no check. */
+  | { kind: 'unread' }
+  | { kind: 'unchecked' }
+  | { kind: 'current'; version: string; checkedAt: string | null }
+  | { kind: 'blocked'; version: string; checkedAt: string | null; why: string }
+  | { kind: 'ready'; version: string; checkedAt: string | null; values: T3PinValues }
+
+export function t3Offer(f: T3Facts): Offer {
+  const status = f.data.reading.status
+  if (status === null) return { kind: 'unread' }
+  const u = status.update
+  if (u === null) return { kind: status.reachable ? 'unchecked' : 'unread' }
+  const { version, checkedAt } = u
+  // The resolver runs hourly, so for up to an hour after an update it still
+  // names the release the pin has just moved to.
+  if (u.current || version === f.data.installed) return { kind: 'current', version, checkedAt }
+  return u.blocked !== null
+    ? { kind: 'blocked', version, checkedAt, why: u.blocked }
+    : { kind: 'ready', version, checkedAt, values: u.values }
 }
 
 /** A session the box minted for itself (the status helper, the thread CLI). */
