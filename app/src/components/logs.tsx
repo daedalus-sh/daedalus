@@ -15,13 +15,12 @@
 // whose sole variable is a raw Loki label matcher — so a caller only ever
 // supplies a `LogSource`, and every embed stays identical.
 //
-// ── the session caveat, stated rather than discovered ─────────────────────
+// ── how the frame signs in ────────────────────────────────────────────────
 //
-// The frame needs a Grafana session it cannot obtain inside itself: Grafana
-// auto-logs-in through Pocket ID, and Pocket ID sends `frame-ancestors 'none'`
-// so its page refuses to render in an iframe. Opening Grafana once in a tab
-// is enough, and the caption says so rather than leaving a login box to be
-// puzzled over.
+// The frame cannot obtain a Grafana session inside itself: Grafana logs in
+// through Pocket ID, which refuses to render in an iframe. So its `src` is
+// this app's /api/grafana-embed, which redirects to the panel with a signed
+// token Grafana accepts in the URL (host/grafana-embed.ts).
 
 import { type ReactNode, useState } from 'react'
 
@@ -73,16 +72,16 @@ const SUBLOG_SUMMARY = cn(
  * Rendering once per mount is what makes `LogFrame`'s one-shot cover enough.
  */
 function grafanaLogsEmbed(
-  site: Site,
   source: LogSource,
   from = 'now-7d',
   theme: ResolvedScheme = 'dark',
 ): string {
-  return (
-    `${site.grafanaUrl}/d-solo/container-logs/container-logs` +
+  const panel =
+    `/d-solo/container-logs/container-logs` +
     `?panelId=1&var-selector=${encodeURIComponent(`${label(source)}${op(source)}"${value(source)}"`)}` +
     `&from=${from}&to=now&theme=${theme}`
-  )
+  // Through this app, which signs the frame in (routes/api.grafana-embed.ts).
+  return `/api/grafana-embed?to=${encodeURIComponent(panel)}`
 }
 
 /** The full Drilldown, for when you need search and live tail. */
@@ -332,7 +331,7 @@ export function GrafanaLogs({
           gets the same skeleton the first load does. */}
       <LogFrame
         key={`${from}-${scheme}`}
-        src={grafanaLogsEmbed(site, source, from, scheme)}
+        src={grafanaLogsEmbed(source, from, scheme)}
         title={title}
         settle={SETTLE.get(from) ?? 1_200}
       />
@@ -343,9 +342,7 @@ export function GrafanaLogs({
           </p>
           <p className={FOOT}>
             The default is seven days because most services here are quiet between restarts, and a
-            short window shows nothing for a service that is perfectly healthy. If the frame shows a
-            login screen, open Grafana once in a tab: it needs a session it cannot obtain inside
-            itself, because the IdP refuses to be framed.
+            short window shows nothing for a service that is perfectly healthy.
           </p>
         </>
       )}

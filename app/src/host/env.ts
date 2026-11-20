@@ -141,6 +141,12 @@ export const SCHEMA = {
     source: 'stacks/monitoring fleet.dashboard.monitoring.env',
     reader: 'host/site.ts',
   },
+  GRAFANA_EMBED_KEY: {
+    kind: 'string',
+    secret: true,
+    about: 'Signs the sign-in token an embedded Grafana panel loads with.',
+    source: 'stacks/monitoring fleet.dashboard.monitoring.envFiles (grafana-embed-key)',
+  },
 
   // ── where the host's read-only mounts are ────────────────────────────────
   EXPORT_DIR: {

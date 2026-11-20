@@ -28,9 +28,7 @@ export function LogFoot({ container, children }: { container: string; children: 
       </p>
       <p className={FOOT}>
         The default is seven days because most services here are quiet between restarts, and a short
-        window shows nothing for a service that is perfectly healthy. If the frame shows a login
-        screen, open Grafana once in a tab: it needs a session it cannot obtain inside itself,
-        because the IdP refuses to be framed.
+        window shows nothing for a service that is perfectly healthy.
       </p>
       <p className={FOOT}>{children}</p>
     </>

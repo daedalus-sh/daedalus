@@ -374,6 +374,24 @@ let
   # the one origin allowed to frame Grafana's panels; read guardedly so a host
   # without the apps platform simply frames nothing.
   controlPlane = config.fleet.webApps.daedalus or null;
+
+  # The key pair behind the embedded panels (see GF_AUTH_JWT_* below): the
+  # control plane signs with the private half, Grafana verifies with the
+  # public one. Minted on the box, like every credential it makes for itself.
+  embedKeyDir = "${config.fleet.machineState}/monitoring/embed-key";
+  embedKey = pkgs.writeShellApplication {
+    name = "grafana-embed-key";
+    runtimeInputs = [
+      pkgs.openssl
+      pkgs.coreutils
+    ];
+    text = ''
+      DIR=${lib.escapeShellArg embedKeyDir}
+      OWNER=${lib.escapeShellArg config.fleet.operator.user}
+      GROUP=${lib.escapeShellArg config.fleet.operator.group}
+      ${builtins.readFile ./assets/embed-key.sh}
+    '';
+  };
 in
 {
   options.fleet.modules.monitoring = {
@@ -424,6 +442,8 @@ in
         # Liveness, traffic and database sizes, read container-direct.
         PROMETHEUS_URL = "http://prometheus:9090";
       };
+      # GRAFANA_EMBED_KEY, what the embedded panels' tokens are signed with.
+      envFiles = [ "${embedKeyDir}/env" ];
       bridges = [ "monitoring" ];
       # A Grafana login the dashboard reads with (the host's service-keys file).
       serviceKeys = [
@@ -448,6 +468,22 @@ in
 
     # 1-min liveness sweep. Runs as the operator so it can talk to the rootless
     # podman socket; writes the .prom file node-exporter serves.
+    systemd.services.grafana-embed-key = {
+      description = "Mint the key the control plane signs Grafana embed tokens with";
+      before = [
+        "podman-grafana.service"
+      ]
+      ++ lib.optional (controlPlane != null) "podman-app-daedalus.service";
+      requiredBy = [ "podman-grafana.service" ];
+      wantedBy = lib.optional (controlPlane != null) "podman-app-daedalus.service";
+      after = [ "local-fs.target" ];
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        ExecStart = lib.getExe embedKey;
+      };
+    };
+
     systemd.services.host-liveness-exporter = {
       description = "Export container_up{name} liveness to node-exporter textfile";
       after = [ "systemd-tmpfiles-setup.service" ];
@@ -598,6 +634,8 @@ in
         "${./assets/provisioning/dashboards}:/etc/grafana/provisioning/dashboards:ro"
         "${alertingDir}:/etc/grafana/provisioning/alerting:ro"
         "${dashboardsDir}:/var/lib/grafana/dashboards:ro"
+        # The embed tokens' public key (the directory: a rotation renames).
+        "${embedKeyDir}/pub:/etc/grafana/embed-key:ro"
       ];
 
       environment = {
@@ -676,6 +714,27 @@ in
         # Link by email instead of erroring if an existing account shares
         # the address (single-user box; "insecure" is fine here).
         GF_AUTH_OAUTH_ALLOW_INSECURE_EMAIL_LOOKUP = "true";
+
+        # The embedded panels' sign-in. A framed panel cannot follow the
+        # Pocket ID redirect (the IdP refuses to be framed), so without a live
+        # Grafana session in the browser every embed came back as that
+        # refusal. Instead the control plane signs a short-lived token
+        # (app/src/host/grafana-embed.ts) and sends the frame to
+        # `/d-solo/…?auth_token=<jwt>`: Grafana verifies it against the
+        # public key and serves the panel as `daedalus-embed`, an org Viewer
+        # (the default role for a signed-up user; the OAuth path alone maps
+        # to Admin). Only a holder of the private key can mint one, and only
+        # the control plane is handed it.
+        GF_AUTH_JWT_ENABLED = "true";
+        GF_AUTH_JWT_URL_LOGIN = "true";
+        GF_AUTH_JWT_HEADER_NAME = "X-JWT-Assertion";
+        GF_AUTH_JWT_USERNAME_CLAIM = "sub";
+        GF_AUTH_JWT_KEY_FILE = "/etc/grafana/embed-key/key.pem";
+        GF_AUTH_JWT_AUTO_SIGN_UP = "true";
+        GF_AUTH_JWT_EXPECT_CLAIMS = builtins.toJSON {
+          iss = "daedalus";
+          aud = "grafana-embed";
+        };
       };
 
       # GF_SECURITY_ADMIN_USER + GF_SECURITY_ADMIN_PASSWORD.
