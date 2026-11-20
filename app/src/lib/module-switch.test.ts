@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { moduleChangeWords, siteBarFields, webChangeWords } from './module-switch'
+import {
+  hiddenProjectChangeWords,
+  moduleChangeWords,
+  siteBarFields,
+  webChangeWords,
+} from './module-switch'
 
 describe('the Apply bar words for a switch', () => {
   it('names each moved id, and a removed entry as the host’s word', () => {
@@ -29,6 +34,19 @@ describe('the Apply bar words for a switch', () => {
     expect(siteBarFields(['mail.sender', 'modules.enabled', 'modules.web'], ['n8n off'])).toEqual([
       'mail.sender',
       'n8n off',
+    ])
+  })
+})
+
+describe('the Apply bar words for a hidden project', () => {
+  it('names each project that moved by its directory', () => {
+    expect(hiddenProjectChangeWords({ t3code: ['/p/a'] }, { t3code: ['/p/b'] })).toEqual([
+      't3code: b hidden',
+      't3code: a shown',
+    ])
+    expect(hiddenProjectChangeWords(undefined, {})).toEqual([])
+    expect(siteBarFields(['modules.hiddenProjects'], ['t3code: b hidden'])).toEqual([
+      't3code: b hidden',
     ])
   })
 })

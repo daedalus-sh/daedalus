@@ -96,8 +96,11 @@ const shape = obj({
         recordOf(arrayOf(obj({ name: str, uuid: str, op: optional(bool, false) }))),
         {},
       ),
+      // The projects a coding-agent server keeps out of its list, per module
+      // id: workspace roots (core/site/hidden-projects.ts).
+      hiddenProjects: optional(recordOf(arrayOf(str)), {}),
     }),
-    { enabled: {}, web: {}, players: {} },
+    { enabled: {}, web: {}, players: {}, hiddenProjects: {} },
   ),
   // The GitHub App's public half. Last, and it must stay last: `obj` copies
   // only the keys named here, so a key missing from this shape is dropped by

@@ -138,11 +138,17 @@ export type SiteDocument = {
    * join and who may run commands, each resolved from the vendor before it
    * was written (core/site/players.ts). Nix hands it to the stack as
    * `fleet.site.players.<id>`. An id with an empty list leaves the document.
+   *
+   * `hiddenProjects.<id>` is the projects a coding-agent server keeps out of
+   * its list (core/site/hidden-projects.ts): workspace roots, every other one
+   * shown. Nix hands it to the stack as `fleet.site.hiddenProjects.<id>`. An
+   * id with an empty list leaves the document.
    */
   modules: {
     enabled: Record<string, boolean>
     web: Record<string, SiteWebOverride>
     players: Record<string, SitePlayer[]>
+    hiddenProjects: Record<string, string[]>
   }
 }
 
@@ -204,7 +210,7 @@ export function siteDocument(s: BoxSettings): SiteDocument {
     commits: { author: 'box' },
     // The running box's switches are its own files' word; the document
     // carries only what the operator moved, which a box read back is none.
-    modules: { enabled: {}, web: {}, players: {} },
+    modules: { enabled: {}, web: {}, players: {}, hiddenProjects: {} },
     github: { app: null, trustedAccounts: [] },
   }
 }
@@ -266,6 +272,13 @@ export function renderSiteFile(doc: SiteDocument): string {
         .map((p) => ({ name: p.name, uuid: p.uuid, op: p.op })),
     ]),
   )
+  // Ids and roots sorted, the same rule as the rosters.
+  const hiding = Object.keys(modules.hiddenProjects)
+    .sort()
+    .filter((id) => (modules.hiddenProjects[id] ?? []).length > 0)
+  const hiddenAsWritten = Object.fromEntries(
+    hiding.map((id) => [id, [...new Set(modules.hiddenProjects[id] ?? [])].sort()]),
+  )
   const body = {
     ...PREAMBLE,
     ...rest,
@@ -279,7 +292,7 @@ export function renderSiteFile(doc: SiteDocument): string {
     ...(commits.author === 'box' ? {} : { commits: { author: commits.author } }),
     // Same rule again, and the ids sorted, so two edits that end in the same
     // set render the same bytes.
-    ...(switched.length === 0 && moved.length === 0 && rostered.length === 0
+    ...(switched.length === 0 && moved.length === 0 && rostered.length === 0 && hiding.length === 0
       ? {}
       : {
           modules: {
@@ -292,6 +305,7 @@ export function renderSiteFile(doc: SiteDocument): string {
                 }),
             ...(moved.length === 0 ? {} : { web: webAsWritten }),
             ...(rostered.length === 0 ? {} : { players: playersAsWritten }),
+            ...(hiding.length === 0 ? {} : { hiddenProjects: hiddenAsWritten }),
           },
         }),
     // Last, and copied key by key. The fixed order keeps a new App a single

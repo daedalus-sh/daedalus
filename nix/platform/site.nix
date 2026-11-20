@@ -117,6 +117,13 @@ let
   sitePlayers = (siteDoc.modules or { }).players or { };
   unknownPlayers = builtins.attrNames (removeAttrs sitePlayers declaredSwitches);
 
+  # site.json `modules.hiddenProjects` — the projects a coding-agent server
+  # keeps out of its list, switched from its page. Keyed by module id, each a
+  # list of workspace roots; every other project stays shown. An id no
+  # imported module declares is refused below, like a roster.
+  siteHidden = (siteDoc.modules or { }).hiddenProjects or { };
+  unknownHidden = builtins.attrNames (removeAttrs siteHidden declaredSwitches);
+
   unknownWeb = builtins.attrNames (
     lib.filterAttrs (
       n: _:
@@ -207,6 +214,19 @@ in
           `modules.players`), as the control plane wrote it from the server's
           page. Defined from the document only; a host does not set it. A module absent here has no roster from the document; what it
           does then is its own choice.
+        '';
+      };
+
+      hiddenProjects = lib.mkOption {
+        # One absolute path per entry, on one line: a stack hands the list to
+        # a script line by line.
+        type = lib.types.attrsOf (lib.types.listOf (lib.types.strMatching "/[^\n\r]*"));
+        default = { };
+        description = ''
+          The workspace roots a coding-agent server keeps out of its project
+          list, by module id (site.json `modules.hiddenProjects`), as the
+          control plane wrote them from the server's page. Every other project
+          stays shown. Defined from the document only; a host does not set it.
         '';
       };
     };
@@ -341,6 +361,8 @@ in
           })
         ) sitePlayers;
 
+        site.hiddenProjects = siteHidden;
+
         # The fields are picked by name so a key the control plane adds later
         # cannot fail the submodule's type check before this module learns it.
         nodes = map (n: {
@@ -453,6 +475,10 @@ in
         {
           assertion = unknownPlayers == [ ];
           message = "site.json modules.players names modules this host does not import: ${lib.concatStringsSep ", " unknownPlayers}. Move the roster from a host that runs them, or remove the entries.";
+        }
+        {
+          assertion = unknownHidden == [ ];
+          message = "site.json modules.hiddenProjects names modules this host does not import: ${lib.concatStringsSep ", " unknownHidden}. Switch them from a host that runs them, or remove the entries.";
         }
         {
           assertion = unknownWeb == [ ];

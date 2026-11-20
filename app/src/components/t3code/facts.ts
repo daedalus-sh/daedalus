@@ -103,3 +103,48 @@ export function t3Offer(f: T3Facts): Offer {
 
 /** A session the box minted for itself (the status helper, the thread CLI). */
 export const isBot = (d: T3Device): boolean => d.deviceType === 'bot'
+
+/** One line of the Projects board: a project T3 lists, or one kept out of it. */
+export type ProjectRow = {
+  root: string
+  title: string
+  repository: string | null
+  /** Null: T3 does not list it, so there is nothing to count. */
+  threads: number | null
+  /** What the next Apply leaves it as. */
+  shown: boolean
+  /** The switch moved on the draft and the next Apply carries it. */
+  pending: boolean
+  /** Hidden by the last Apply, yet still in T3: the sync never deletes a thread. */
+  kept: boolean
+}
+
+const lastStep = (root: string) => root.split('/').filter(Boolean).pop() ?? root
+
+/**
+ * The projects T3 lists, then the hidden ones it no longer does, each with
+ * its switch. A project is keyed by its workspace root, as site.json names it.
+ */
+export function projectRows(f: T3Facts): ProjectRow[] {
+  const { committed, desired } = f.data.hidden
+  const hiddenNow = new Set(committed)
+  const hiddenNext = new Set(desired)
+  const row = (root: string, rest: Pick<ProjectRow, 'title' | 'repository' | 'threads'>) => ({
+    root,
+    ...rest,
+    shown: !hiddenNext.has(root),
+    pending: hiddenNow.has(root) !== hiddenNext.has(root),
+    kept: hiddenNow.has(root) && rest.threads !== null,
+  })
+  const listed = f.live?.projects ?? []
+  const seen = new Set(listed.map((p) => p.workspaceRoot))
+  return [
+    ...listed.map((p) =>
+      row(p.workspaceRoot, { title: p.title, repository: p.repository, threads: p.threads }),
+    ),
+    ...[...new Set([...committed, ...desired])]
+      .filter((r) => !seen.has(r))
+      .sort()
+      .map((r) => row(r, { title: lastStep(r), repository: null, threads: null })),
+  ]
+}

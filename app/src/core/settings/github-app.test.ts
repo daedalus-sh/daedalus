@@ -125,7 +125,7 @@ const DOC: SiteDocument = {
   oidc: { issuer: '', clientId: '', name: '' },
   developer: { engineOverride: false },
   commits: { author: 'box' },
-  modules: { enabled: {}, web: {}, players: {} },
+  modules: { enabled: {}, web: {}, players: {}, hiddenProjects: {} },
 }
 
 const committed = (app: SiteGithubApp | null) => ({

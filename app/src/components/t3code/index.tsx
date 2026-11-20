@@ -246,8 +246,8 @@ function T3Logs() {
         {
           source: { unit: 't3code-projects.service' },
           label: 'Project sync',
-          role: 'what adds each workspace as a project',
-          note: 'Runs when the server starts and whenever the workspace list changes, and says which projects it added. Look here when a workspace that was just cloned is missing from Projects.',
+          role: 'what adds each workspace as a project, and removes the hidden ones',
+          note: 'Runs when the server starts, whenever the workspace list changes and after an Apply that moves a switch on Projects, and says which projects it added and removed. Look here when a workspace that was just cloned is missing from Projects, or a hidden one is still in T3.',
         },
         {
           source: { unit: 't3code-status.service' },

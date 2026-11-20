@@ -40,7 +40,7 @@ const doc: SiteDocument = {
   oidc: { issuer: '', clientId: '', name: '' },
   developer: { engineOverride: false },
   commits: { author: 'box' },
-  modules: { enabled: {}, web: {}, players: {} },
+  modules: { enabled: {}, web: {}, players: {}, hiddenProjects: {} },
 }
 
 const APP: SiteGithubApp = {
@@ -103,6 +103,7 @@ describe('site.json round trip', () => {
           metube: { label: null, public: true },
         },
         players: {},
+        hiddenProjects: {},
       },
     })
     expect(moved).toContain('"n8n": false')
@@ -114,11 +115,17 @@ describe('site.json round trip', () => {
       enabled: { n8n: false },
       web: { grocy: { label: 'pantry', public: null }, metube: { label: null, public: true } },
       players: {},
+      hiddenProjects: {},
     })
     // The web block alone is a modules block too.
     const webOnly = renderSiteFile({
       ...doc,
-      modules: { enabled: {}, web: { grocy: { label: 'pantry', public: false } }, players: {} },
+      modules: {
+        enabled: {},
+        web: { grocy: { label: 'pantry', public: false } },
+        players: {},
+        hiddenProjects: {},
+      },
     })
     expect(webOnly).toContain('"modules"')
     expect(webOnly).not.toContain('"enabled"')
@@ -129,7 +136,12 @@ describe('site.json round trip', () => {
     const alice = { name: 'Alice', uuid: '00000000-0000-4000-8000-000000000001', op: true }
     const rostered = renderSiteFile({
       ...doc,
-      modules: { enabled: {}, web: {}, players: { minecraft: [bob, alice], factorio: [] } },
+      modules: {
+        enabled: {},
+        web: {},
+        players: { minecraft: [bob, alice], factorio: [] },
+        hiddenProjects: {},
+      },
     })
     expect(rostered).not.toContain('factorio')
     expect(rostered.indexOf('"Alice"')).toBeLessThan(rostered.indexOf('"bob_"'))
@@ -141,6 +153,27 @@ describe('site.json round trip', () => {
     const bare = JSON.parse(rostered)
     delete bare.modules.players.minecraft[1].op
     expect(decodeSiteDocument(bare).modules.players.minecraft?.[1]?.op).toBe(false)
+  })
+
+  it('writes hidden projects sorted and once, and drops an empty list', () => {
+    const hidden = renderSiteFile({
+      ...doc,
+      modules: {
+        enabled: {},
+        web: {},
+        players: {},
+        hiddenProjects: { t3code: ['/srv/b', '/srv/a', '/srv/b'], other: [] },
+      },
+    })
+    expect(hidden).not.toContain('"other"')
+    expect(hidden).not.toContain('"players"')
+    expect(reRender(hidden)).toBe(hidden)
+    expect(decodeSiteDocument(JSON.parse(hidden)).modules.hiddenProjects).toEqual({
+      t3code: ['/srv/a', '/srv/b'],
+    })
+    // A document from before the field reads as nothing hidden.
+    const before = JSON.parse(renderSiteFile(doc))
+    expect(decodeSiteDocument(before).modules.hiddenProjects).toEqual({})
   })
 
   it('render → parse → decode → render is a fixed point', () => {

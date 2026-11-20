@@ -140,6 +140,8 @@ export type T3CodeData = {
   versionStatus: VersionUpdateStatus
   /** What a restart ends, by this reading; the confirm asks again as it arms. */
   restartConfirm: string
+  /** The workspace roots kept out of T3 Code (site.json `modules.hiddenProjects.t3code`). */
+  hidden: { committed: string[]; desired: string[] }
 }
 
 /** Five missed runs of a two-minute timer. */
@@ -339,13 +341,13 @@ export function restartConfirm(r: T3Reading): string {
 
 const orNull = (s: string | undefined): string | null => (s === undefined || s === '' ? null : s)
 
-export async function loadT3Code(
-  ctx: Pick<Ctx, 'env' | 'snapshot' | 'hosts' | 'controller'>,
-): Promise<T3CodeData> {
+export async function loadT3Code(ctx: Ctx): Promise<T3CodeData> {
   const { readVersionUpdateStatus } = await import('../../host/version-update')
-  const [reading, versionStatus] = await Promise.all([
+  const { hiddenProjects } = await import('../../core/site/hidden-projects')
+  const [reading, versionStatus, hidden] = await Promise.all([
     readT3Code(ctx),
     readVersionUpdateStatus(ctx),
+    hiddenProjects(ctx, 't3code'),
   ])
   const installed = orNull(ctx.env('T3CODE_VERSION')) ?? orNull(reading.status?.installedVersion)
   // What the RUNNING server said it is, in preference to what nix installed:
@@ -361,6 +363,7 @@ export async function loadT3Code(
     gap,
     versionStatus,
     restartConfirm: restartConfirm(reading),
+    hidden,
   }
 }
 

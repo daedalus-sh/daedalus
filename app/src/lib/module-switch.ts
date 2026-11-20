@@ -152,6 +152,28 @@ export function playerChangeWords(
   })
 }
 
+/**
+ * "t3code: anansi hidden", "t3code: anansi shown": the words the Apply bar
+ * shows for `modules.hiddenProjects`, one per project that moved, named by
+ * the last step of its workspace root.
+ */
+export function hiddenProjectChangeWords(
+  committed: Record<string, string[]> | undefined,
+  desired: Record<string, string[]>,
+): string[] {
+  const before = committed ?? {}
+  const ids = new Set([...Object.keys(before), ...Object.keys(desired)])
+  const name = (root: string) => root.split('/').filter(Boolean).pop() ?? root
+  return [...ids].sort().flatMap((id) => {
+    const a = new Set(before[id] ?? [])
+    const b = new Set(desired[id] ?? [])
+    return [
+      ...[...b].filter((r) => !a.has(r)).map((r) => `${id}: ${name(r)} hidden`),
+      ...[...a].filter((r) => !b.has(r)).map((r) => `${id}: ${name(r)} shown`),
+    ]
+  })
+}
+
 /** The trusted GitHub accounts, as the Apply bar words them: "github: santree-ai trusted". */
 export function trustChangeWords(
   committed: readonly { login: string; id: number }[],
@@ -180,6 +202,7 @@ export function siteBarFields(
         f !== 'modules.enabled' &&
         f !== 'modules.web' &&
         f !== 'modules.players' &&
+        f !== 'modules.hiddenProjects' &&
         f !== 'github.trustedAccounts',
     ),
     ...moduleChanges,

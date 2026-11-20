@@ -86,7 +86,7 @@ const committed: SiteDocument = {
   oidc: { issuer: '', clientId: '', name: '' },
   developer: { engineOverride: false },
   commits: { author: 'box' },
-  modules: { enabled: {}, web: {}, players: {} },
+  modules: { enabled: {}, web: {}, players: {}, hiddenProjects: {} },
   github: {
     app: {
       id: 123456,

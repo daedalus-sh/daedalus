@@ -3,7 +3,7 @@ import type { Ctx } from '../ctx'
 
 vi.mock('./index', () => ({
   siteEdit: vi.fn(async () => ({
-    committed: { modules: { enabled: {}, web: {}, players: {} } },
+    committed: { modules: { enabled: {}, web: {}, players: {}, hiddenProjects: {} } },
     desired: {
       modules: { enabled: { metube: false }, web: { pihole: { label: 'dns', public: null } } },
     },

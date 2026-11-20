@@ -106,6 +106,9 @@ const EDITABLE = [
   'modules.web',
   // A game server's roster (core/site/players.ts), worded per account.
   'modules.players',
+  // The projects a coding-agent server keeps out of its list
+  // (core/site/hidden-projects.ts), worded per project.
+  'modules.hiddenProjects',
   // The accounts besides the owner whose installation of the GitHub App the
   // box trusts (core/site/trusted-accounts.ts), worded per account.
   'github.trustedAccounts',
@@ -229,9 +232,13 @@ export async function siteEdit(ctx: Ctx): Promise<SiteEdit> {
   // can never be pinned to a stale value by an old draft.
   const desired =
     draft === null ? base : EDITABLE.reduce((acc, f) => setField(acc, f, getField(draft, f)), base)
-  const { moduleChangeWords, playerChangeWords, trustChangeWords, webChangeWords } = await import(
-    '../../lib/module-switch'
-  )
+  const {
+    hiddenProjectChangeWords,
+    moduleChangeWords,
+    playerChangeWords,
+    trustChangeWords,
+    webChangeWords,
+  } = await import('../../lib/module-switch')
   return {
     committed: committedDoc,
     desired,
@@ -243,6 +250,10 @@ export async function siteEdit(ctx: Ctx): Promise<SiteEdit> {
             ...moduleChangeWords(committedDoc.modules.enabled, desired.modules.enabled),
             ...webChangeWords(committedDoc.modules.web, desired.modules.web),
             ...playerChangeWords(committedDoc.modules.players, desired.modules.players),
+            ...hiddenProjectChangeWords(
+              committedDoc.modules.hiddenProjects,
+              desired.modules.hiddenProjects,
+            ),
             ...trustChangeWords(
               committedDoc.github?.trustedAccounts ?? [],
               desired.github?.trustedAccounts ?? [],
