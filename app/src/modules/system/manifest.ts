@@ -22,9 +22,9 @@ export const manifest = {
   // `head: false` on every tab before Claude, for the same reason as
   // the dots: these are layers of a machine, and a header saying "version
   // 6.12.93, current, Open ↗" is a claim about a service that is not there.
-  // No `nix` anywhere: every tab here is the machine, and the machine is
-  // always shown. (The shared postgres cluster, a service the box can switch
-  // off, is the Database module.)
+  // No `nix` on any tab but the last: the others are the machine, and the
+  // machine is always shown. (The shared postgres cluster, a service the box
+  // can switch off, is the Database module.)
   //
   // A machine picker above the tabs, and with it a different place on the
   // rail: a module about every machine on the network is not a directory
@@ -32,7 +32,7 @@ export const manifest = {
   // own. A node's System page keeps these tab ids — Host, Memory, Disks,
   // Build, Updates, Claude — over the one document its agent publishes and
   // its Claude report (modules/system/view/node/, modules/system/view/node/claude);
-  // Pools, Backups and Shotter are the box's alone.
+  // Pools, Backups, Shotter and T3 Code are the box's alone.
   machinePicker: true,
   tabs: [
     { id: 'host', label: 'Host', boardSpans: [8, 4, 4, 4, 4, 8, 4], head: false },
@@ -94,5 +94,9 @@ export const manifest = {
     // The sessions' eyes: the headless browser a session drives to look at
     // a page. The box's alone — the browser lab is here.
     { id: 'shotter', label: 'Shotter', boardSpans: [4, 8, 12] },
+    // The coding-agent server a host stack runs over the same workspaces: the
+    // threads it holds, the devices paired to it. The one tab here that is a
+    // module the box can switch off, so the one with `nix`.
+    { id: 't3code', label: 'T3 Code', boardSpans: [12, 12, 6, 6, 12], nix: 't3code' },
   ],
 } as const satisfies ModuleManifest

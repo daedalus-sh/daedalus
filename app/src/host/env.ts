@@ -236,6 +236,12 @@ export const SCHEMA = {
       'The status the Matrix stack’s helper writes: the homeserver, the operator’s account, each bridge login. Never a secret.',
     source: 'stacks/matrix fleet.dashboard.matrix.env',
   },
+  T3CODE_STATUS_FILE: {
+    kind: 'path',
+    about:
+      'The status the T3 Code stack’s helper writes: the server, its projects, threads and paired devices. Never a credential.',
+    source: 'stacks/t3code fleet.dashboard.t3code.env',
+  },
   GITHUB_TOKEN_PATH: {
     kind: 'path',
     about: 'The GitHub App’s minted installation token.',
@@ -547,6 +553,11 @@ export const SCHEMA = {
     kind: 'string',
     about: 'The Playwright the shotter image carries.',
     source: 'stacks/shotter fleet.dashboard.shotter.env',
+  },
+  T3CODE_VERSION: {
+    kind: 'string',
+    about: 'The T3 Code build the box installs.',
+    source: 'stacks/t3code fleet.dashboard.t3code.env',
   },
   PROTON_BRIDGE_VERSION: {
     kind: 'string',

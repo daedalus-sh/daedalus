@@ -69,6 +69,7 @@ const LABELS: Record<string, string> = {
   registry: 'Registry',
   searxng: 'SearXNG',
   'stirling-pdf': 'Stirling-PDF',
+  t3code: 'T3 Code',
   'wg-easy': 'WireGuard',
   'yazio-mcp': 'Yazio MCP',
 }
@@ -124,6 +125,7 @@ export const ICON_FILES: Record<string, string> = {
   shotter: '/icon-shotter.svg',
   sonarr: '/icon-sonarr.svg',
   'stirling-pdf': '/icon-stirling-pdf.svg',
+  t3code: '/icon-t3code.svg',
   traefik: '/icon-traefik.svg',
   verdaccio: '/icon-verdaccio.png',
   wealthfolio: '/icon-wealthfolio.png',

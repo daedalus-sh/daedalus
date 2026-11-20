@@ -31,6 +31,7 @@ import { type DisksData, loadDisks } from './disks'
 import { type HostData, loadHost } from './host'
 import { loadMemory, type MemoryData } from './memory'
 import { loadPools, type PoolsData } from './pools'
+import { loadT3Code, type T3CodeData } from './t3code'
 import { loadUpdates, type UpdatesData } from './updates'
 
 export type Tabs = {
@@ -44,12 +45,14 @@ export type Tabs = {
   backups: BackupsData
   claude: ClaudeData
   shotter: ClaudeData
+  t3code: T3CodeData
 }
 export type SystemData = TabPayload<typeof manifest, Tabs>
 
-// No loader here reads `ctx.env`: the numbers are prometheus's or a host
+// No loader for the machine reads `ctx.env`: the numbers are prometheus's or a host
 // snapshot's, plus MSI's release list (Motherboard) and the Claude snapshot's
-// Loki history (Claude, Shotter).
+// Loki history (Claude, Shotter). T3 Code is the exception: its status file is
+// a path the host stack binds.
 export const load = defineLoader<typeof manifest, Tabs>(manifest, {
   host: loadHost,
   memory: loadMemory,
@@ -61,6 +64,7 @@ export const load = defineLoader<typeof manifest, Tabs>(manifest, {
   backups: loadBackups,
   claude: loadClaude,
   shotter: loadClaude,
+  t3code: loadT3Code,
 })
 
 export type { HostFacts } from '../../../lib/dashboard/host-facts'

@@ -1,4 +1,5 @@
 import { ClaudeView, ShotterView } from '../../../components/claude'
+import { T3CodeView } from '../../../components/t3code'
 import { defineViews } from '../../../lib/modules/tabs'
 import type { Tabs } from '../data'
 import { manifest } from '../manifest'
@@ -37,4 +38,5 @@ export const views = defineViews<typeof manifest, Tabs>(manifest, {
   backups: ({ data }) => <BackupsView d={data} />,
   claude: ({ data }) => <ClaudeView data={data} />,
   shotter: ({ data }) => <ShotterView data={data} />,
+  t3code: ({ data }) => <T3CodeView data={data} />,
 })
