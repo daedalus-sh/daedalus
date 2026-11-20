@@ -76,37 +76,35 @@ let
     }COMMIT
   '';
 
-  # $1 is the app whose container is starting: a bridge off its pin fails
-  # that app's start (its guard would be guarding the wrong addresses) and is
-  # only reported for the others, so one renumbered bridge takes down no
-  # other app.
-  isoGuard = pkgs.writeShellScript "fleet-iso-guard" ''
-    set -eu
-    podman=${pkgs.podman}/bin/podman
-    iptables=${pkgs.iptables}/bin/iptables
-    self=$1
-    in_ns() { "$podman" unshare --rootless-netns "$@"; }
-    # One guard at a time: the isolated apps start together (a switch, a
-    # boot), and two of them moving the jump at once would leave two.
-    exec 9>"${cfg.operator.runtimeDir}/fleet-iso-guard.lock"
-    ${pkgs.util-linux}/bin/flock -w 60 9
-    ${lib.concatMapStrings (n: ''
-      have=$("$podman" network inspect ${isoBridge n}-net --format '{{range .Subnets}}{{.Subnet}} {{end}}' || true)
-      if [ "$have" != "${isoPin n} " ]; then
-        echo "iso guard: ${isoBridge n}-net is on '$have', not its pin ${isoPin n}" >&2
-        [ "$self" != ${n} ] || exit 1
-      fi
-    '') (lib.attrNames isolatedApps)}
-    in_ns ${pkgs.iptables}/bin/iptables-restore --noflush ${isoRules}
-    # The jump must come FIRST: netavark's own jump (NETAVARK_FORWARD)
-    # accepts every bridge's traffic, and a guard behind it guards nothing.
-    # netavark inserts its jump at the top whenever it finds it missing, so
-    # the position is checked, not only the presence.
-    if [ "$(in_ns "$iptables" -S FORWARD | ${pkgs.gnused}/bin/sed -n 2p)" != "-A FORWARD -j FLEET_ISO" ]; then
-      while in_ns "$iptables" -D FORWARD -j FLEET_ISO 2>/dev/null; do :; done
-      in_ns "$iptables" -I FORWARD 1 -j FLEET_ISO
-    fi
-  '';
+  # The guard: isolation-guard.sh checks the pins, then enters the namespace
+  # once to run isolation-load.sh (the chain and its jump).
+  isoPins = pkgs.writeText "fleet-iso.pins" (
+    lib.concatMapStrings (n: "${n} ${isoBridge n}-net ${isoPin n}\n") (lib.attrNames isolatedApps)
+  );
+  isoLoad = pkgs.writeShellApplication {
+    name = "fleet-iso-load";
+    runtimeInputs = [
+      pkgs.iptables
+      pkgs.gnused
+    ];
+    text = ''
+      RULES=${isoRules}
+      ${builtins.readFile ./isolation-load.sh}
+    '';
+  };
+  isoGuard = pkgs.writeShellApplication {
+    name = "fleet-iso-guard";
+    runtimeInputs = [
+      pkgs.podman
+      pkgs.util-linux
+    ];
+    text = ''
+      PINS=${isoPins}
+      LOAD=${lib.getExe isoLoad}
+      LOCK=${lib.escapeShellArg "${cfg.operator.runtimeDir}/fleet-iso-guard.lock"}
+      ${builtins.readFile ./isolation-guard.sh}
+    '';
+  };
 in
 {
   config = {
@@ -165,8 +163,8 @@ in
     systemd.services = lib.mapAttrs' (
       n: w:
       lib.nameValuePair "podman-${w.serviceName}" {
-        serviceConfig.ExecStartPre = [ "${isoGuard} ${n}" ];
-        serviceConfig.ExecStartPost = [ "${isoGuard} ${n}" ];
+        serviceConfig.ExecStartPre = [ "${lib.getExe isoGuard} ${n}" ];
+        serviceConfig.ExecStartPost = [ "${lib.getExe isoGuard} ${n}" ];
       }
     ) isolatedApps;
   };
