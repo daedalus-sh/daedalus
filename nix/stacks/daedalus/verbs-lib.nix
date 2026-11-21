@@ -21,6 +21,7 @@ let
     operatorVars
     operatorHomeVars
     commitVars
+    grafanaVars
     workspaceVars
     workspaceRuntimeInputs
     githubAppField
@@ -55,6 +56,34 @@ let
   # The control plane is not in the registry and has a file too: the client
   # secret on Settings › Sign-in.
   secretApps = lib.attrNames registryApps ++ [ "daedalus" ];
+
+  # Container → `{ members, probes }`, for the image updater's health check.
+  # `members` is the container's stack as the log-stack registry names it
+  # (a container in none is a stack of one); `probes` are the web apps one of
+  # those members serves by name — gatus names a probe after its web app. A
+  # web app reached through `serviceUrl` (a VPN tenant, the host netns) has no
+  # container to tie it to and is left out, as are scrape targets dialled at
+  # the host rather than a container name.
+  imageHealth =
+    let
+      stacks = lib.attrValues config.fleet.logStacks;
+      membersOf = c: lib.findFirst (s: lib.elem c s) [ c ] stacks;
+      probesOf =
+        ms:
+        lib.attrNames (
+          lib.filterAttrs (_: w: w.serviceName != null && lib.elem w.serviceName ms) config.fleet.webApps
+        );
+    in
+    lib.genAttrs (lib.attrNames config.virtualisation.oci-containers.containers) (
+      c:
+      let
+        ms = membersOf c;
+      in
+      {
+        members = ms;
+        probes = probesOf ms;
+      }
+    );
 
   # Set or remove ONE key in an app's operator-secrets file. The host half of
   # the write-only secrets editor: daedalus can seal a value (sopsStatic, the
@@ -107,10 +136,13 @@ let
       config.system.build.nixos-rebuild # the system's own: ng, named nixos-rebuild
       config.fleet.upgradeGuard.package # fleet-switch-guard (host/lib.sh)
       pkgs.openssh # git push over ssh
+      pkgs.curl # host/grafana-lib.sh
+      pkgs.gnused
     ];
     vars =
       operatorHomeVars
       // commitVars
+      // grafanaVars
       // {
         VERBS_DIR = verbsDir;
         PREV_DIR = prevDir;
@@ -126,6 +158,7 @@ let
       };
     files = [
       ./host/lib.sh
+      ./host/grafana-lib.sh
       ./host/site-lib.sh
       ./host/apply.sh
     ];
@@ -176,12 +209,17 @@ let
       pkgs.procps # pgrep
       pkgs.util-linux # flock
       pkgs.coreutils
+      pkgs.jq
+      pkgs.curl # host/grafana-lib.sh
+      pkgs.gnugrep
+      pkgs.gnused
     ];
-    vars = {
+    vars = grafanaVars // {
       LOCKFILE = config.fleet.rebuildLock;
     };
     files = [
       ./host/lib.sh
+      ./host/grafana-lib.sh
       ./host/power.sh
     ];
   };
@@ -226,10 +264,12 @@ let
       config.system.build.nixos-rebuild # the system's own: ng, named nixos-rebuild
       config.fleet.upgradeGuard.package # fleet-switch-guard (host/lib.sh)
       pkgs.openssh # git push over ssh
+      pkgs.curl # host/grafana-lib.sh
     ];
     vars =
       operatorHomeVars
       // commitVars
+      // grafanaVars
       // {
         VERBS_DIR = verbsDir;
         FLAKE = config.fleet.config.repo;
@@ -261,6 +301,11 @@ let
               ) data.manual
             )
           );
+        # What "still working" means for each container, for the health half
+        # of verify (host/image-update.sh): the stack it belongs to (whose
+        # members' scrape targets it checks, by the instance's host part) and
+        # the web apps those members serve (whose gatus probes it checks).
+        HEALTH = pkgs.writeText "daedalus-image-health.json" (builtins.toJSON imageHealth);
         LOCKFILE = config.fleet.rebuildLock;
         HOSTNAME = config.networking.hostName;
         OPERATOR_RUNTIME_DIR = config.fleet.operator.runtimeDir;
@@ -268,6 +313,7 @@ let
       };
     files = [
       ./host/lib.sh
+      ./host/grafana-lib.sh
       ./host/image-update.sh
     ];
   };
@@ -278,6 +324,7 @@ let
   applyReaper = mkUpdateReaper {
     name = "daedalus-apply-reaper";
     statusFile = "apply-status.json";
+    quietKey = "apply";
     nextSteps = "The rebuild may or may not have completed — check `journalctl -u 'daedalus-apply@*'` and `git log` in ${config.fleet.config.repo} before applying again";
   };
 
@@ -287,6 +334,7 @@ let
   imageUpdateReaper = mkUpdateReaper {
     name = "daedalus-image-update-reaper";
     statusFile = "image-update-status.json";
+    quietKey = "image-update";
     nextSteps = "Nothing was necessarily committed — check `journalctl -u 'daedalus-image-update@*'` and `git log` in ${config.fleet.config.repo}";
   };
 

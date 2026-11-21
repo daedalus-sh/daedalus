@@ -42,6 +42,7 @@ let
     mkRootVerb
     operatorHomeVars
     commitVars
+    grafanaVars
     ;
 
   # The first half of the `claude-code-update` verb (host/claude-code-update.sh,
@@ -99,10 +100,12 @@ let
       config.system.build.nixos-rebuild # the system's own: ng, named nixos-rebuild
       config.fleet.upgradeGuard.package # fleet-switch-guard (host/lib.sh)
       pkgs.openssh # git fetch and push over ssh, as the operator
+      pkgs.gnused # host/grafana-lib.sh
     ];
     vars =
       operatorHomeVars
       // commitVars
+      // grafanaVars
       // {
         VERBS_DIR = verbsDir;
         FLAKE = config.fleet.config.repo;
@@ -119,6 +122,7 @@ let
       };
     files = [
       ./host/lib.sh
+      ./host/grafana-lib.sh
       ./host/engine-update.sh
     ];
   };
@@ -128,6 +132,7 @@ let
   updateReaper = mkUpdateReaper {
     name = "daedalus-engine-update-reaper";
     statusFile = "engine-update-status.json";
+    quietKey = "engine-update";
     nextSteps = "Nothing was necessarily committed — check `journalctl -u 'daedalus-engine-update@*'` and `git log` in ${config.fleet.config.repo}";
   };
 in

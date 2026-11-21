@@ -297,6 +297,8 @@ fi
 # exits non-zero if ANY unit fails to come back, and some of those failures
 # are transient rather than caused by the change.
 write_status running switching ""
+# Its restarts are planned: hold back the alerts they set off (host/grafana-lib.sh).
+quiet_begin engine-update "daedalus engine update ${REQ_ID-}: planned restarts"
 if ! log_run "$LOGFILE" nixos-rebuild switch --flake "$FLAKE#$HOSTNAME"; then
   log_line "$LOGFILE" "switch failed once — retrying in 20s before rolling back"
   sleep 20

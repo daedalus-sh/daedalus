@@ -35,6 +35,7 @@ let
     mkRootVerb
     operatorHomeVars
     commitVars
+    grafanaVars
     ;
 
   # The registry as the agent reads it: the allowlist and the parse at once,
@@ -61,10 +62,12 @@ let
       pkgs.openssh # git push over ssh
       pkgs.systemd # systemctl stop, before a rollback
       config.boot.zfs.package
+      pkgs.curl # host/grafana-lib.sh
     ];
     vars =
       operatorHomeVars
       // commitVars
+      // grafanaVars
       // {
         VERBS_DIR = verbsDir;
         FLAKE = config.fleet.config.repo;
@@ -77,6 +80,7 @@ let
       };
     files = [
       ./host/lib.sh
+      ./host/grafana-lib.sh
       ./host/version-update.sh
     ];
   };
@@ -86,6 +90,7 @@ let
   updateReaper = mkUpdateReaper {
     name = "daedalus-version-update-reaper";
     statusFile = "version-update-status.json";
+    quietKey = "version-update";
     nextSteps = "Check `journalctl -u 'daedalus-version-update@*'`, `git log` in ${config.fleet.config.repo}";
   };
 in

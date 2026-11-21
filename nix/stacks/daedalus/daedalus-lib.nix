@@ -75,22 +75,33 @@ rec {
       name,
       statusFile,
       nextSteps,
+      # The verb whose quiet window (host/grafana-lib.sh) the reaper closes;
+      # null for a verb that never switches.
+      quietKey ? null,
     }:
     mkAgent {
       inherit name;
       runtimeInputs = [
         pkgs.jq
         pkgs.coreutils
+        pkgs.curl
+        pkgs.gnugrep
+        pkgs.gnused
       ];
       # NEXT_STEPS quotes commands in backticks, as Markdown for the page:
       # literal text in single quotes, which is what SC2016 warns about.
       excludeShellChecks = [ "SC2016" ];
-      vars = operatorVars // {
-        STATUS = "${verbsDir}/${statusFile}";
-        NEXT_STEPS = nextSteps;
-      };
+      vars =
+        operatorVars
+        // grafanaVars
+        // {
+          STATUS = "${verbsDir}/${statusFile}";
+          NEXT_STEPS = nextSteps;
+          QUIET_KEY = if quietKey == null then "" else quietKey;
+        };
       files = [
         ./host/lib.sh
+        ./host/grafana-lib.sh
         ./host/update-reaper.sh
       ];
     };
@@ -116,6 +127,16 @@ rec {
     GIT_EMAIL = config.fleet.mail.sender;
     GIT_OPERATOR_NAME = config.fleet.operator.gitName;
     GIT_OPERATOR_EMAIL = config.fleet.operator.gitEmail;
+  };
+
+  # What host/grafana-lib.sh dials Grafana with: its published name, the LAN
+  # address to resolve it to (pinned, so a DNS hiccup mid-switch cannot turn
+  # into a rollback), and the dotenv holding the break-glass login. Empty with
+  # monitoring off, which the script reads as "no Grafana to ask".
+  grafanaVars = lib.optionalAttrs config.fleet.modules.monitoring.enable {
+    GRAFANA_HOST = config.fleet.webApps.grafana.hostname;
+    GRAFANA_ADDR = config.fleet.lanIp;
+    GRAFANA_ENV = config.sops.secrets."grafana-env".path;
   };
 
   # The previous bytes of every site file an Apply (or a secret-set) replaces,

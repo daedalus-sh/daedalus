@@ -4,7 +4,8 @@
 #
 # Inlined by mkAgent after host/lib.sh; expects STATUS (the verb's status
 # file), NEXT_STEPS (what to check, as one sentence without its full stop),
-# OPERATOR_USER, OPERATOR_GROUP and SETPRIV. SERVICE_RESULT is systemd's.
+# OPERATOR_USER, OPERATOR_GROUP and SETPRIV; QUIET_KEY and grafanaVars for the
+# quiet window. SERVICE_RESULT is systemd's.
 #
 # The agent writes its own terminal state, so this only ever fires when it did
 # not get to: killed, out of memory, or dead on a line nobody tested. Without
@@ -20,7 +21,13 @@
 # (version-update's) gets it in the message, since the rollback it was taken
 # for may not have run.
 
-# A clean exit is the overwhelmingly common case and has nothing to do here.
+# First, whatever the run's result: close its quiet window (host/grafana-lib.sh)
+# down to the tail. This reaper is the one thing that runs however the verb
+# ended — clean, failed, killed or timed out — which is why the window is
+# closed here and not by the verb itself.
+[ -z "${QUIET_KEY-}" ] || quiet_end "$QUIET_KEY"
+
+# A clean exit is the overwhelmingly common case and has nothing more to do.
 [ "${SERVICE_RESULT:-success}" = "success" ] && exit 0
 [ -f "$STATUS" ] || exit 0
 

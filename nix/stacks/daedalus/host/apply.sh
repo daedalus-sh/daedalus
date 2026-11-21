@@ -332,6 +332,8 @@ if REBOOT_REASONS="$(reboot_required "$LOGFILE")"; then
 else
   REBOOT_REASONS=""
   write_status running "$ACTIVATE_PHASE" ""
+  # Its restarts are planned: hold back the alerts they set off (host/grafana-lib.sh).
+  quiet_begin apply "daedalus Apply ${REQ_ID-}: planned restarts"
   if ! log_run "$LOGFILE" rebuild "$ACTIVATE"; then
     log_line "$LOGFILE" "$ACTIVATE failed once — retrying in 20s before rolling back"
     sleep 20

@@ -38,6 +38,13 @@ if ! flock -n 9; then
   refuse "another rebuild holds $LOCKFILE (flake-autoupgrade, or a manual nixos-rebuild) — try again when it finishes"
 fi
 
+# Every container stops and starts again: hold back the alerts that sets off
+# (host/grafana-lib.sh). Nothing will be left to close the window, so it is
+# opened for the whole of it — the boot, the rules' `for`, and the 5xx rule's
+# ten-minute sum — and expires on its own. Grafana keeps silences in its
+# database, so this one outlives the reboot it covers.
+quiet_begin reboot "daedalus reboot: planned restarts" 20
+
 verb_done "rebooting"
 sync
 

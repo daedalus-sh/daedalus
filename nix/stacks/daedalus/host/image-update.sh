@@ -487,11 +487,98 @@ if REBOOT_REASONS="$(reboot_required "$LOGFILE")"; then
   exit 0
 fi
 
+# --- health baseline --------------------------------------------------------
+# Running the new image is not the same as working on it. Immich v3.4.2 came
+# back on its new digest, answered its UI, and stopped answering every scrape
+# of its metrics ports with a 400 — a regression this verify passed and an
+# alert found fifteen hours later. So verify also asks what the monitoring
+# sees: every scrape target and gatus probe that belongs to a moved
+# container's stack (HEALTH, from verbs-lib.nix) and is healthy NOW, before
+# the switch, must be healthy again after it.
+#
+# Only what is healthy now: a target that was already down is not this
+# update's doing, and must not roll back a good one. No Prometheus to ask (the
+# monitoring module off, Grafana down) means no baseline and no health check —
+# the image check alone, as before — never a refused update.
+HEALTH_WAIT=300
+WATCH_TARGETS='[]'
+WATCH_PROBES='{}'
+
+# The containers this run restarts on a new image: a digest pin's container,
+# or every container a moved base's local image runs in.
+moved_containers() {
+  jq -c --slurpfile p "$PINS" '
+    [ .[] | select(.changed) | .container as $m | ($p[0][$m] // {}) as $pin
+      | if ($pin.local // false) then $pin.containers[] else $m end ] | unique' <<<"$MOVES"
+}
+
+health_baseline() {
+  local cs members probes up ok totals
+  cs="$(moved_containers)"
+  members="$(jq -c --slurpfile h "$HEALTH" '[ .[] as $c | ($h[0][$c].members // [$c])[] ] | unique' <<<"$cs")"
+  probes="$(jq -c --slurpfile h "$HEALTH" '[ .[] as $c | ($h[0][$c].probes // [])[] ] | unique' <<<"$cs")"
+  if ! up="$(prom_query 'up == 1' 2>/dev/null)"; then
+    log_line "$LOGFILE" "no Prometheus to ask (monitoring off or Grafana unreachable): verifying images only"
+    return 0
+  fi
+  WATCH_TARGETS="$(jq -c --argjson m "$members" '
+    [ .data.result[]?.metric | select((.instance // "" | split(":")[0]) as $h | any($m[]; . == $h))
+      | { instance, job } ]' <<<"$up")"
+  ok="$(prom_query 'gatus_results_endpoint_success == 1' 2>/dev/null)" || ok='{}'
+  totals="$(prom_query 'sum by (name) (gatus_results_total{success="true"})' 2>/dev/null)" || totals='{}'
+  # name → successful probes so far; a probe has answered since the switch
+  # once its count moves off this number (or restarts from zero with gatus).
+  WATCH_PROBES="$(jq -nc --argjson p "$probes" --argjson ok "$ok" --argjson t "$totals" '
+    ([ $t.data.result[]? | { key: .metric.name, value: (.value[1] | tonumber) } ] | from_entries) as $tot
+    | [ $ok.data.result[]?.metric.name | select(. as $n | any($p[]; . == $n)) ] | unique
+    | map({ key: ., value: ($tot[.] // 0) }) | from_entries')"
+  log_line "$LOGFILE" "health to keep: targets $(jq -r '[.[].instance] | join(" ")' <<<"$WATCH_TARGETS") probes $(jq -r 'keys | join(" ")' <<<"$WATCH_PROBES")"
+}
+
+# Wait for every watched target to be scraped up=1 after $1 (the epoch the
+# switch returned) and every watched probe to have succeeded since. Prints
+# what is still missing at the deadline; returns non-zero if anything is.
+health_wait() {
+  local since="$1" deadline pending healthy fresh totals
+  deadline=$(($(date +%s) + HEALTH_WAIT))
+  while :; do
+    pending=""
+    if healthy="$(prom_query 'up == 1' 2>/dev/null)" &&
+      fresh="$(prom_query "timestamp(up) > $since" 2>/dev/null)" &&
+      totals="$(prom_query 'sum by (name) (gatus_results_total{success="true"})' 2>/dev/null)"; then
+      pending="$(jq -nr --argjson w "$WATCH_TARGETS" --argjson p "$WATCH_PROBES" \
+        --argjson h "$healthy" --argjson f "$fresh" --argjson t "$totals" '
+        ([ $h.data.result[]?.metric | .instance + " " + .job ]) as $up
+        | ([ $f.data.result[]?.metric | .instance + " " + .job ]) as $new
+        | ([ $t.data.result[]? | { key: .metric.name, value: (.value[1] | tonumber) } ] | from_entries) as $now
+        | [ ($w[] | select((.instance + " " + .job) as $k | (any($up[]; . == $k) and any($new[]; . == $k)) | not)
+             | "target \(.instance) (job \(.job))"),
+            ($p | to_entries[] | select(($now[.key] // 0) as $n | ($n == .value or $n == 0))
+             | "probe \(.key)") ]
+        | join(", ")')"
+    else
+      pending="Prometheus, through Grafana, is not answering"
+    fi
+    [ -n "$pending" ] || return 0
+    if [ "$(date +%s)" -ge "$deadline" ]; then
+      printf '%s' "$pending"
+      return 1
+    fi
+    sleep 10
+  done
+}
+
+if [ "$(jq 'map(select(.changed)) | length' <<<"$MOVES")" -gt 0 ]; then
+  health_baseline
+fi
+
 # --- switch ---------------------------------------------------------------
 # One retry before rolling back, for the reason apply.sh documents: `switch`
 # exits non-zero if ANY unit fails to come back, and some of those failures
 # are transient rather than caused by the change.
 write_status running switching ""
+# Its restarts are planned: hold back the alerts they set off (host/grafana-lib.sh).
+quiet_begin image-update "daedalus image update ${REQ_ID-}: planned restarts"
 if ! log_run "$LOGFILE" nixos-rebuild switch --flake "$FLAKE#$HOSTNAME"; then
   log_line "$LOGFILE" "switch failed once — retrying in 20s before rolling back"
   sleep 20
@@ -512,6 +599,7 @@ fi
 # A short grace first: the switch returns when systemd is done starting units,
 # which is before a container that pulls, migrates or waits on a dependency is
 # answering for itself.
+SWITCHED_AT="$(date +%s)"
 write_status running verifying ""
 sleep 15
 
@@ -570,6 +658,17 @@ if [ -n "$bad" ]; then
   log_line "$LOGFILE" "verification failed for:$bad"
   rollback
   fail verifying "the switch succeeded but these are not running the new image:$bad — rolled back"
+fi
+
+# The health half (see "health baseline"): on the new image, and still
+# answering what it answered before.
+if [ "$WATCH_TARGETS" != '[]' ] || [ "$WATCH_PROBES" != '{}' ]; then
+  if ! unhealthy="$(health_wait "$SWITCHED_AT")"; then
+    log_line "$LOGFILE" "health check failed: $unhealthy"
+    rollback
+    fail verifying "on the new image, but not healthy again ${HEALTH_WAIT}s after the switch: $unhealthy — rolled back"
+  fi
+  log_line "$LOGFILE" "health check passed"
 fi
 
 # --- push -----------------------------------------------------------------
