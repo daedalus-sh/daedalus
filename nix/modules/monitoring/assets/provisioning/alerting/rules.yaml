@@ -1032,6 +1032,12 @@ groups:
         labels:
           severity: warning
         isPaused: false
+      # Latency is time per I/O, so on an idle disk it is one I/O's time: a
+      # spinning disk that parked its heads answers the next lone read in
+      # ~200 ms, and one such read in five minutes held this rule for its
+      # whole window. The floor (2 I/O per second, averaged over the same
+      # five minutes) asks for a workload before judging its latency; a
+      # disk that is slow under load is the failure this rule is for.
       - uid: disk-read-latency-1
         title: Host Disk Read Latency High
         condition: C
@@ -1042,7 +1048,7 @@ groups:
               to: 0
             datasourceUid: prometheus-default
             model:
-              expr: (rate(node_disk_read_time_seconds_total{device!~"sr.*"}[5m]) / rate(node_disk_reads_completed_total[5m])) and rate(node_disk_reads_completed_total[5m]) > 0
+              expr: (rate(node_disk_read_time_seconds_total{device!~"sr.*"}[5m]) / rate(node_disk_reads_completed_total[5m])) and rate(node_disk_reads_completed_total[5m]) > 2
               instant: true
               intervalMs: 1000
               maxDataPoints: 43200
@@ -1083,7 +1089,7 @@ groups:
               to: 0
             datasourceUid: prometheus-default
             model:
-              expr: (rate(node_disk_write_time_seconds_total{device!~"sr.*"}[5m]) / rate(node_disk_writes_completed_total[5m])) and rate(node_disk_writes_completed_total[5m]) > 0
+              expr: (rate(node_disk_write_time_seconds_total{device!~"sr.*"}[5m]) / rate(node_disk_writes_completed_total[5m])) and rate(node_disk_writes_completed_total[5m]) > 2
               instant: true
               intervalMs: 1000
               maxDataPoints: 43200
