@@ -65,6 +65,7 @@
         "claude-code/claude-code.nix"
         "claude/claude.nix"
         "config-bundle.nix"
+        "container-revive.nix"
         "ddclient/ddclient.nix"
         "export.nix"
         "git/git.nix"

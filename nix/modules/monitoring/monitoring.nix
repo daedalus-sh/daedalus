@@ -122,6 +122,16 @@ let
         if printf '%s\n' "$running" | grep -qxF "$name"; then up=1; else up=0; fi
         echo "container_up{name=\"$name\"} $up"
       done
+      # platform/container-revive counts each restart it gives a container
+      # that died behind its unit; 0 for the ones it never touched, so the
+      # first restart is an increase and not a series appearing.
+      echo "# HELP container_revives_total Times the box restarted this container after it died, since boot."
+      echo "# TYPE container_revives_total counter"
+      for name in ${lib.concatStringsSep " " containerNames}; do
+        n=$(cat "${config.fleet.containerRevive.stateDir}/total/$name" 2>/dev/null || echo 0)
+        case "$n" in "" | *[!0-9]*) n=0 ;; esac
+        echo "container_revives_total{name=\"$name\"} $n"
+      done
       echo "# HELP systemd_failed_units Count of systemd system units in failed state."
       echo "# TYPE systemd_failed_units gauge"
       echo "systemd_failed_units $failed"

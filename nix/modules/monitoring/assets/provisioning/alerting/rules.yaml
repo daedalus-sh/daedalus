@@ -96,6 +96,10 @@ groups:
       # per-container liveness signal.
       # container_up{name="X"} is 1 when the declared container is running,
       # 0 when stopped/missing; fire on 0.
+      # Six minutes, not one: platform/container-revive restarts a container
+      # that died behind its unit within about two, and a crash the box healed
+      # is not a page. What reaches this rule is a container it could not
+      # bring back (three tries, then it stops) or one it does not restart.
       - uid: container-disappeared-1
         title: Container Disappeared
         condition: C
@@ -134,10 +138,55 @@ groups:
               type: threshold
         noDataState: OK
         execErrState: Error
+        for: 6m
+        annotations:
+          description: Container {{ $labels.name }} is down (container_up = 0) and was not brought back. `journalctl -u container-revive` says what was tried.
+          summary: A declared container is down and stayed down
+        labels:
+          severity: warning
+        isPaused: false
+      # The other half of the revive: a container that comes back every time
+      # and keeps dying never trips the rule above. One capped episode is
+      # three restarts, so more than three in a day is a second episode.
+      # increase() extrapolates, hence 3.5 and not 3.
+      - uid: container-keeps-crashing-1
+        title: Container Keeps Crashing
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus-default
+            model:
+              expr: max by (name) (increase(container_revives_total[24h]))
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 3.5
+                    type: gt
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: OK
         for: 1m
         annotations:
-          description: Container {{ $labels.name }} is down (container_up = 0).
-          summary: A declared container has stopped unexpectedly
+          description: Container {{ $labels.name }} died and was restarted {{ printf "%.0f" $values.A.Value }} times in the last 24 hours. It is running now; find out why it keeps exiting (its logs in Loki outlive each container).
+          summary: A container keeps dying and being restarted
         labels:
           severity: warning
         isPaused: false

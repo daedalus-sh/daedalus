@@ -8,3 +8,13 @@ policies:
     group_by:
       - grafana_folder
       - alertname
+    routes:
+      # This rule looks back a day, so it stays firing for a day after the
+      # last restart. Said once: the default repeat would mail it every four
+      # hours for a fact that has not changed.
+      - receiver: email
+        object_matchers:
+          - - alertname
+            - =
+            - Container Keeps Crashing
+        repeat_interval: 2d
