@@ -779,6 +779,11 @@ groups:
         labels:
           severity: critical
         isPaused: false
+  # Predictive rules need BOTH windows to see the fill: the 6h trend says it
+  # is big enough to matter, the 30m one says it is still happening. One
+  # burst (every app rebuilt after a base re-pin) is a step the 6h window
+  # keeps extrapolating for hours after it ended; the 30m window is flat by
+  # then, so the alert stays quiet for a fill that already stopped.
   - orgId: 1
     name: Predictive Alerts
     folder: System
@@ -794,7 +799,7 @@ groups:
               to: 0
             datasourceUid: prometheus-default
             model:
-              expr: predict_linear(node_filesystem_avail_bytes{fstype!~"tmpfs|nfs|ramfs", mountpoint!~".*pods.*"}[6h], 86400)
+              expr: predict_linear(node_filesystem_avail_bytes{fstype!~"tmpfs|nfs|ramfs", mountpoint!~".*pods.*"}[6h], 86400) < 0 and predict_linear(node_filesystem_avail_bytes{fstype!~"tmpfs|nfs|ramfs", mountpoint!~".*pods.*"}[30m], 86400) < 0
               instant: true
               intervalMs: 1000
               maxDataPoints: 43200
@@ -835,7 +840,7 @@ groups:
               to: 0
             datasourceUid: prometheus-default
             model:
-              expr: predict_linear(node_filesystem_files_free{fstype!~"tmpfs|nfs|ramfs", mountpoint!~".*pods.*"}[6h], 86400)
+              expr: predict_linear(node_filesystem_files_free{fstype!~"tmpfs|nfs|ramfs", mountpoint!~".*pods.*"}[6h], 86400) < 0 and predict_linear(node_filesystem_files_free{fstype!~"tmpfs|nfs|ramfs", mountpoint!~".*pods.*"}[30m], 86400) < 0
               instant: true
               intervalMs: 1000
               maxDataPoints: 43200

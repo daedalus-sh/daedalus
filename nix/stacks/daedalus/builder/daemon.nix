@@ -39,7 +39,9 @@
 #     build agent's `requires=` can trust it.
 #
 # BuildKit's GC is written as explicit gcpolicy blocks: a bare maxUsedSpace
-# expands into the default four rules, one of them 512 MB / 48 h.
+# expands into the default four rules, one of them 512 MB / 48 h. The cap is
+# 60 GB against the dataset's 150G quota: one full rebuild of every app is
+# ~12 GB, so it holds several and the quota is never the limit.
 #
 # A change to the toml, the start script or the limits restarts buildkitd,
 # which kills a running build.
@@ -78,7 +80,7 @@ rec {
       # Read only by the default policy set, which the explicit blocks below
       # replace; kept so the worker's advertised caps match them.
       reservedSpace = "10GB";
-      maxUsedSpace = "120GB";
+      maxUsedSpace = "60GB";
       minFreeSpace = "15GB";
       # BuildKit's default four rules, with this dataset's numbers.
       gcpolicy = [
@@ -93,24 +95,26 @@ rec {
           keepDuration = "168h";
           maxUsedSpace = "25GB";
         }
-        # Anything unused for 60 days.
+        # Anything unused for 14 days. A base re-pin (node, railpack) or a
+        # lockfile change orphans every app's pnpm-install snapshot (0.6-1 GB
+        # each), so a longer window mostly keeps sets no build can reuse.
         {
-          keepDuration = "1440h";
+          keepDuration = "336h";
           reservedSpace = "10GB";
-          maxUsedSpace = "120GB";
+          maxUsedSpace = "60GB";
           minFreeSpace = "15GB";
         }
         # Unshared cache under the cap.
         {
           reservedSpace = "10GB";
-          maxUsedSpace = "120GB";
+          maxUsedSpace = "60GB";
           minFreeSpace = "15GB";
         }
         # Then everything, internal records included.
         {
           all = true;
           reservedSpace = "10GB";
-          maxUsedSpace = "120GB";
+          maxUsedSpace = "60GB";
           minFreeSpace = "15GB";
         }
       ];
