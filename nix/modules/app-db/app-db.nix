@@ -114,7 +114,7 @@ let
   # The base pin, bumped by hand in the engine and listed on System ›
   # Updates. A patch or minor is this edit; a MAJOR also moves `pgMajor`,
   # after the README's dump/restore into the new dir.
-  pgBase = "docker.io/library/postgres:19.0-alpine@sha256:8b0ff4cdf221f0c53d7fcda681d3b461be725c492cd881c5ec9c0ad25023f188";
+  pgBase = "docker.io/library/postgres:19.0-alpine@sha256:cac45fb483caee3668946088a1c0532db89d5285c28dbfeac889b4068296e06f";
   pgImageBuild = mkLocalImage {
     name = "pg-pgvector";
     bases.BASE = pgBase;

@@ -12,7 +12,7 @@
 #
 # Debian slim, not alpine: lightningcss, rolldown and @node-rs/argon2 ship
 # glibc prebuilds. Pinned by index digest, so every platform resolves its own.
-ARG NODE_IMAGE=docker.io/library/node:26.13.1-slim@sha256:e6bedef217677b276c591795e169840edd9096dbf13f29df8ef8d1856b8820bc
+ARG NODE_IMAGE=docker.io/library/node:26.13.1-slim@sha256:abe7e5a82b61a8ef67b315b85497c9e65173387ccf2f4a029248184b8e020be5
 
 # --- sops --------------------------------------------------------------------
 #

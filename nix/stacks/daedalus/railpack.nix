@@ -14,7 +14,7 @@
 # mise is the third artifact of that release. `prepare` resolves versions by
 # running mise ON THE HOST, and railpack gets it by downloading
 # github.com/jdx/mise's release tarball with no checksum into a writable cache
-# (v0.43.0 core/mise/install.go). Its `ensureInstalled` only stats
+# (v0.43.1 core/mise/install.go). Its `ensureInstalled` only stats
 # `<InstallDir>/mise-<Version>` — InstallDir is /tmp/railpack/mise
 # (core/mise/mise.go), Version is core/mise/version.txt — and downloads when
 # the file is absent. So the build agent binds `miseBinary` read-only at
@@ -50,9 +50,9 @@
 }:
 
 let
-  version = "0.43.0";
-  # railpack v0.43.0's core/mise/version.txt — moves with `version`.
-  miseVersion = "2026.10.14";
+  version = "0.43.1";
+  # railpack v0.43.1's core/mise/version.txt — moves with `version`.
+  miseVersion = "2026.11.12";
 
   railpack = pkgs.stdenvNoCC.mkDerivation {
     pname = "railpack";
@@ -61,7 +61,7 @@ let
     src = pkgs.fetchurl {
       url = "https://github.com/railwayapp/railpack/releases/download/v${version}/railpack-v${version}-x86_64-unknown-linux-musl.tar.gz";
       # = GitHub's asset digest sha256:248a8f60f36854aabed6124113631078a802de3461660855fc4de9c26065c1fb
-      hash = "sha256-JIqPYPNoVKq+1hJBE2MQeKgC3jRhZghV/E3pwmBlwfs=";
+      hash = "sha256-ejhJposvFC3NnPrmjJHF1cs7q0sedJ/Hls2RkKOBHqA=";
     };
 
     # The tarball has no top-level directory: LICENSE, README.md, railpack.
@@ -99,7 +99,7 @@ let
     src = pkgs.fetchurl {
       url = "https://github.com/jdx/mise/releases/download/v${miseVersion}/mise-v${miseVersion}-linux-x64-musl.tar.gz";
       # = GitHub's asset digest sha256:0f95d528ad0b8c54f7022be2ff22a36be149123ff9b27bdaa216d349a9f59c17
-      hash = "sha256-D5XVKK0LjFT3Aivi/yKja+FJEj/5snvaohbTSan1nBc=";
+      hash = "sha256-TBXZAn0R6FwDwQNBzFbXDY7zHwPbb4JzfXEXrsMO2wU=";
     };
 
     # Unpacks to mise/ — the same `mise/bin/mise` member railpack extracts.
@@ -133,7 +133,7 @@ in
     fleet.builder = {
       inherit railpack;
       # Same release as `version` above — bumped together, never apart.
-      railpackFrontend = "ghcr.io/railwayapp/railpack-frontend:v${version}@sha256:355ef61fae6f2551103cd8b10c710cb07167dd353d561f15c69b8d7ac1c676cc";
+      railpackFrontend = "ghcr.io/railwayapp/railpack-frontend:v${version}@sha256:1f0bb3015946a77d33555756abdceb31885025763c63363ccfb27d83ad919ff9";
       miseBinary = "${mise}/bin/mise";
       misePath = "/tmp/railpack/mise/mise-${miseVersion}";
     };
