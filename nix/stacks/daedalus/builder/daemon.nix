@@ -41,7 +41,9 @@
 # BuildKit's GC is written as explicit gcpolicy blocks: a bare maxUsedSpace
 # expands into the default four rules, one of them 512 MB / 48 h. The cap is
 # 60 GB against the dataset's 150G quota: one full rebuild of every app is
-# ~12 GB, so it holds several and the quota is never the limit.
+# ~14 GB, mostly pnpm-install snapshots (0.6-1 GB each, a new one per
+# lockfile or base change), so it holds several and the quota is never the
+# limit.
 #
 # A change to the toml, the start script or the limits restarts buildkitd,
 # which kills a running build.
@@ -95,9 +97,10 @@ rec {
           keepDuration = "168h";
           maxUsedSpace = "25GB";
         }
-        # Anything unused for 14 days. A base re-pin (node, railpack) or a
-        # lockfile change orphans every app's pnpm-install snapshot (0.6-1 GB
-        # each), so a longer window mostly keeps sets no build can reuse.
+        # Anything unused for 14 days. Rarely the rule that frees space: a
+        # cache hit refreshes only the chain's last record, which keeps every
+        # parent alive, so a repo rebuilt within two weeks keeps its whole
+        # chain. The cap below is what bounds the cache.
         {
           keepDuration = "336h";
           reservedSpace = "10GB";
